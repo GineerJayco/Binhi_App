@@ -5,13 +5,13 @@ plugins {
 }
 
 android {
-    namespace = "com.example.agriplanner"
+    namespace = "com.example.binhi"
     compileSdk {
         version = release(36)
     }
 
     defaultConfig {
-        applicationId = "com.example.agriplanner"
+        applicationId = "com.example.binhi"
         minSdk = 24
         targetSdk = 36
         versionCode = 1
@@ -45,6 +45,7 @@ dependencies {
     implementation("com.google.android.gms:play-services-location:21.2.0")
     implementation("com.google.accompanist:accompanist-permissions:0.34.0")
     implementation("com.google.maps.android:maps-compose:4.3.3")
+    implementation("com.google.android.gms:play-services-maps:19.2.0")
     implementation("androidx.navigation:navigation-compose:2.9.5")
     implementation("androidx.compose.material:material-icons-extended-android:1.7.8")
     implementation(libs.androidx.core.ktx)

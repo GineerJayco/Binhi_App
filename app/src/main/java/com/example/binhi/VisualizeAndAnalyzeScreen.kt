@@ -1,4 +1,4 @@
-package com.example.agriplanner
+package com.example.binhi
 
 import android.Manifest
 import android.annotation.SuppressLint
@@ -48,7 +48,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
-import com.example.agriplanner.ui.theme.BinhiTheme
+import com.example.binhi.ui.theme.BinhiTheme
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.maps.android.compose.*

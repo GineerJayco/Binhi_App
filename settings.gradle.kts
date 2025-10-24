@@ -19,5 +19,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Agriplanner"
+rootProject.name = "BINHI"
 include(":app")

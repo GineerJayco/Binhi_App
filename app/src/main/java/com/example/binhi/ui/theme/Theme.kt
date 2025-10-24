@@ -1,4 +1,4 @@
-package com.example.agriplanner.ui.theme
+package com.example.binhi.ui.theme
 
 import android.app.Activity
 import android.os.Build

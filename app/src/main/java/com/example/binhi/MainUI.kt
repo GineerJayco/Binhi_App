@@ -1,4 +1,4 @@
-package com.example.agriplanner
+package com.example.binhi
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -25,7 +25,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.example.agriplanner.ui.theme.BinhiTheme
+import com.example.binhi.ui.theme.BinhiTheme
 
 class MainUI : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
