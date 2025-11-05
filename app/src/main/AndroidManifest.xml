@@ -9,6 +9,12 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
 
     <!-- ADD THESE LINES for Bluetooth on Android 12+ -->
+    <uses-permission
+        android:name="android.permission.BLUETOOTH"
+        android:maxSdkVersion="30" />
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_ADMIN"
+        android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 
@@ -24,7 +30,7 @@
 
         <meta-data
             android:name="com.google.android.geo.API_KEY"
-            android:value="AIzaSyAtuQQkOS7ZRB_TabXxVOlygX0gkY0OG_8" />
+            android:value="AIzaSyDfeNuFFnL_6lzHfU27rl8k3lah-KSsAmA" />
 
         <activity
             android:name=".MainUI"
