@@ -80,6 +80,23 @@ class MainUI : ComponentActivity() {
                                 cropQuantity = backStackEntry.arguments?.getString("cropQuantity")
                             )
                         }
+                        composable(
+                            route = "get_soil_data/{landArea}/{length}/{width}/{crop}",
+                            arguments = listOf(
+                                navArgument("landArea") { type = NavType.StringType },
+                                navArgument("length") { type = NavType.StringType },
+                                navArgument("width") { type = NavType.StringType },
+                                navArgument("crop") { type = NavType.StringType }
+                            )
+                        ) { backStackEntry ->
+                            GetSoilData(
+                                navController = navController,
+                                landArea = backStackEntry.arguments?.getString("landArea"),
+                                length = backStackEntry.arguments?.getString("length"),
+                                width = backStackEntry.arguments?.getString("width"),
+                                crop = backStackEntry.arguments?.getString("crop")
+                            )
+                        }
                     }
                 }
             }

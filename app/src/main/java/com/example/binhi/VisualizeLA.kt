@@ -2,50 +2,136 @@ package com.example.binhi
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.RotateLeft
-import androidx.compose.material.icons.automirrored.filled.RotateRight
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowLeft
-import androidx.compose.material.icons.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.LocationOff
-import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.automirrored.filled.*
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.createBitmap
 import androidx.navigation.NavController
-import com.google.android.gms.location.LocationServices
-import com.google.android.gms.maps.model.CameraPosition
-import com.google.android.gms.maps.model.LatLng
-import com.google.maps.android.compose.GoogleMap
-import com.google.maps.android.compose.MapProperties
-import com.google.maps.android.compose.MapType
-import com.google.maps.android.compose.MapUiSettings
-import com.google.maps.android.compose.Polygon
-import com.google.maps.android.compose.rememberCameraPositionState
-import kotlin.math.cos
-import kotlin.math.sin
 import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.maps.model.*
+import com.google.maps.android.compose.*
 import kotlinx.coroutines.launch
+import kotlin.math.*
+import com.example.binhi.utils.convertToDMS
+import com.example.binhi.utils.isPointInsidePolygon
+
+private fun calculateCropPositions(
+    polygonPoints: List<LatLng>,
+    cropType: String?,
+    estimatedQuantity: Int
+): List<LatLng> {
+    if (polygonPoints.isEmpty() || cropType == null) return emptyList()
+
+    val cropPlanting = CropData.crops[cropType] ?: return emptyList()
+    val plantingDistance = cropPlanting.plantingDistance
+
+    // Calculate the dimensions of the plot
+    val minLat = polygonPoints.minOf { it.latitude }
+    val maxLat = polygonPoints.maxOf { it.latitude }
+    val minLng = polygonPoints.minOf { it.longitude }
+    val maxLng = polygonPoints.maxOf { it.longitude }
+
+    // Convert planting distance to approximate degree values
+    val latDistance = plantingDistance / 111111.0 // approximate degrees per meter at the equator
+    val lngDistance = plantingDistance / (111111.0 * cos(Math.toRadians((minLat + maxLat) / 2)))
+
+    val positions = mutableListOf<LatLng>()
+    var currentLat = minLat + latDistance / 2
+    var row = 0
+
+    while (currentLat <= maxLat - latDistance / 2 && positions.size < estimatedQuantity) {
+        var currentLng = minLng + lngDistance / 2
+        if (row % 2 == 1) currentLng += lngDistance / 2 // Offset alternate rows for square system
+
+        while (currentLng <= maxLng - lngDistance / 2 && positions.size < estimatedQuantity) {
+            val position = LatLng(currentLat, currentLng)
+            if (isPointInsidePolygon(position, polygonPoints)) {
+                positions.add(position)
+            }
+            currentLng += lngDistance
+        }
+        currentLat += latDistance
+        row++
+    }
+
+    return positions
+}
+
+@Composable
+private fun MapContent(
+    polygonPoints: List<LatLng>,
+    crop: String?,
+    landArea: String?,
+    onMarkerClick: (LatLng) -> Unit
+) {
+    val context = LocalContext.current
+
+    if (polygonPoints.isNotEmpty()) {
+        key(polygonPoints) {  // Add key to force recomposition when polygon moves
+            Polygon(
+                points = polygonPoints,
+                fillColor = Color.Red.copy(alpha = 0.5f),
+                strokeColor = Color.Red,
+                strokeWidth = 5f
+            )
+
+            val estimatedQuantity = landArea?.toDoubleOrNull()?.let { area ->
+                val plantingArea = CropData.crops[crop]?.areaPerPlant ?: 0.0
+                if (plantingArea > 0) floor(area / plantingArea).toInt() else 0
+            } ?: 0
+
+            val cropPositions = calculateCropPositions(polygonPoints, crop, estimatedQuantity)
+
+            cropPositions.forEach { position ->
+                val markerState = rememberMarkerState(position = position)
+                val icon = crop?.let { cropType ->
+                    CropData.crops[cropType]?.let { cropData ->
+                        val drawable = ContextCompat.getDrawable(context, cropData.iconResource)!!
+                        drawable.setBounds(0, 0, drawable.intrinsicWidth, drawable.intrinsicHeight)
+                        val bitmap = createBitmap(
+                            width = drawable.intrinsicWidth,
+                            height = drawable.intrinsicHeight,
+                            config = Bitmap.Config.ARGB_8888
+                        )
+                        val canvas = Canvas(bitmap)
+                        drawable.draw(canvas)
+                        BitmapDescriptorFactory.fromBitmap(bitmap)
+                    }
+                } ?: BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN)
+
+                Marker(
+                    state = markerState,
+                    title = crop ?: "Crop",
+                    icon = icon,
+                    onClick = {
+                        onMarkerClick(position)
+                        true
+                    }
+                )
+            }
+        }
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -65,6 +151,9 @@ fun VisualizeLA(
     var rotation by remember { mutableFloatStateOf(0f) }
     var showMyLocation by remember { mutableStateOf(true) }
     var polygonCenter by remember { mutableStateOf(dumaguete) }
+    var isPolygonDragging by remember { mutableStateOf(false) }
+    var selectedMarkerPosition by remember { mutableStateOf<LatLng?>(null) }
+    var showMarkerDialog by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -111,9 +200,38 @@ fun VisualizeLA(
         }
     )
 
+    // State declarations are already defined above
+
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .pointerInput(Unit) {
+                detectDragGesturesAfterLongPress(
+                    onDragStart = { _ ->
+                        isPolygonDragging = true
+                    },
+                    onDragEnd = {
+                        isPolygonDragging = false
+                    },
+                    onDragCancel = {
+                        isPolygonDragging = false
+                    },
+                    onDrag = { change, dragAmount ->
+                        change.consume()
+                        if (isPolygonDragging) {
+                            val sensitivity = 0.125f
+                            val centerLatRad = Math.toRadians(polygonCenter.latitude)
+                            val latOffset = -dragAmount.y * sensitivity / 111132.0
+                            val lonOffset = dragAmount.x * sensitivity / (111320.0 * cos(centerLatRad))
+
+                            polygonCenter = LatLng(
+                                polygonCenter.latitude + latOffset,
+                                polygonCenter.longitude + lonOffset
+                            )
+                        }
+                    }
+                )
+            }
     ) {
         val lengthInMeters = length?.toDoubleOrNull() ?: 0.0
         val widthInMeters = width?.toDoubleOrNull() ?: 0.0
@@ -157,16 +275,22 @@ fun VisualizeLA(
                 mapType = mapType,
                 isMyLocationEnabled = hasLocationPermission && showMyLocation
             ),
-            uiSettings = MapUiSettings(myLocationButtonEnabled = false)
+            uiSettings = MapUiSettings(
+                myLocationButtonEnabled = false,
+                rotationGesturesEnabled = true,
+                scrollGesturesEnabled = !isPolygonDragging,
+                zoomGesturesEnabled = !isPolygonDragging
+            )
         ) {
-            if (polygonPoints.isNotEmpty()) {
-                Polygon(
-                    points = polygonPoints,
-                    fillColor = Color.Red.copy(alpha = 0.5f),
-                    strokeColor = Color.Red,
-                    strokeWidth = 5f
-                )
-            }
+            MapContent(
+                polygonPoints = polygonPoints,
+                crop = crop,
+                landArea = landArea,
+                onMarkerClick = { position ->
+                    selectedMarkerPosition = position
+                    showMarkerDialog = true
+                }
+            )
         }
 
         MapScaleBar(
@@ -257,14 +381,14 @@ fun VisualizeLA(
                 val lonOffset = moveDistance / (111320.0 * cos(centerLatRad))
                 polygonCenter = LatLng(polygonCenter.latitude, polygonCenter.longitude - lonOffset)
             }) {
-                Icon(Icons.Default.KeyboardArrowLeft, contentDescription = "Move Left", tint = Color.White)
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Move Left", tint = Color.White)
             }
             IconButton(onClick = {
                 val centerLatRad = Math.toRadians(polygonCenter.latitude)
                 val lonOffset = moveDistance / (111320.0 * cos(centerLatRad))
                 polygonCenter = LatLng(polygonCenter.latitude, polygonCenter.longitude + lonOffset)
             }) {
-                Icon(Icons.Default.KeyboardArrowRight, contentDescription = "Move Right", tint = Color.White)
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Move Right", tint = Color.White)
             }
             IconButton(onClick = { showMyLocation = !showMyLocation }) {
                 Icon(if (showMyLocation) Icons.Default.MyLocation else Icons.Default.LocationOff, contentDescription = "Toggle My Location Layer", tint = Color.White)
@@ -303,6 +427,25 @@ fun VisualizeLA(
                     onClose = { showDetails = false }
                 )
             }
+        }
+
+        if (showMarkerDialog && selectedMarkerPosition != null) {
+            AlertDialog(
+                onDismissRequest = { showMarkerDialog = false },
+                title = { Text("Crop Location") },
+                text = {
+                    Column {
+                        Text("Coordinates:")
+                        Text(convertToDMS(selectedMarkerPosition!!.latitude, true))
+                        Text(convertToDMS(selectedMarkerPosition!!.longitude, false))
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showMarkerDialog = false }) {
+                        Text("Close")
+                    }
+                }
+            )
         }
     }
 }

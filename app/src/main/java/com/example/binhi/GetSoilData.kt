@@ -2,8 +2,6 @@ package com.example.binhi
 
 import android.Manifest
 import android.content.pm.PackageManager
-import android.graphics.Bitmap
-import android.graphics.Canvas
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -11,95 +9,60 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.*
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.RotateLeft
+import androidx.compose.material.icons.automirrored.filled.RotateRight
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import androidx.core.graphics.createBitmap
 import androidx.navigation.NavController
-import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
-import com.google.android.gms.maps.model.*
+import com.google.android.gms.maps.model.BitmapDescriptorFactory
+import com.google.android.gms.maps.model.CameraPosition
+import com.google.android.gms.maps.model.LatLng
 import com.google.maps.android.compose.*
-import kotlinx.coroutines.launch
 import kotlin.math.*
-import com.example.binhi.utils.convertToDMS
+import com.google.android.gms.location.FusedLocationProviderClient
+import kotlinx.coroutines.launch
 
-fun isPointInsidePolygon(point: LatLng, polygon: List<LatLng>): Boolean {
-    var inside = false
-    var j = polygon.size - 1
-    for (i in polygon.indices) {
-        if ((polygon[i].longitude > point.longitude) != (polygon[j].longitude > point.longitude) &&
-            point.latitude < (polygon[j].latitude - polygon[i].latitude) *
-            (point.longitude - polygon[i].longitude) /
-            (polygon[j].longitude - polygon[i].longitude) + polygon[i].latitude
-        ) {
-            inside = !inside
-        }
-        j = i
-    }
-    return inside
-}
-
-private fun calculateCropPositions(
-    polygonPoints: List<LatLng>,
-    cropType: String?,
-    estimatedQuantity: Int
-): List<LatLng> {
-    if (polygonPoints.isEmpty() || cropType == null) return emptyList()
-
-    val cropPlanting = CropData.crops[cropType] ?: return emptyList()
-    val plantingDistance = cropPlanting.plantingDistance
-
-    // Calculate the dimensions of the plot
-    val minLat = polygonPoints.minOf { it.latitude }
-    val maxLat = polygonPoints.maxOf { it.latitude }
-    val minLng = polygonPoints.minOf { it.longitude }
-    val maxLng = polygonPoints.maxOf { it.longitude }
-
-    // Convert planting distance to approximate degree values
-    val latDistance = plantingDistance / 111111.0 // approximate degrees per meter at the equator
-    val lngDistance = plantingDistance / (111111.0 * cos(Math.toRadians((minLat + maxLat) / 2)))
-
-    val positions = mutableListOf<LatLng>()
-    var currentLat = minLat + latDistance / 2
-    var row = 0
-
-    while (currentLat <= maxLat - latDistance / 2 && positions.size < estimatedQuantity) {
-        var currentLng = minLng + lngDistance / 2
-        if (row % 2 == 1) currentLng += lngDistance / 2 // Offset alternate rows for square system
-
-        while (currentLng <= maxLng - lngDistance / 2 && positions.size < estimatedQuantity) {
-            val position = LatLng(currentLat, currentLng)
-            if (isPointInsidePolygon(position, polygonPoints)) {
-                positions.add(position)
-            }
-            currentLng += lngDistance
-        }
-        currentLat += latDistance
-        row++
+// Utility function to convert decimal degrees to DMS format
+private fun decimalToDMS(decimal: Double, isLatitude: Boolean): String {
+    val direction = when {
+        isLatitude && decimal >= 0 -> "N"
+        isLatitude && decimal < 0 -> "S"
+        !isLatitude && decimal >= 0 -> "E"
+        else -> "W"
     }
 
-    return positions
+    val absDecimal = abs(decimal)
+    val degrees = absDecimal.toInt()
+    val minutesDecimal = (absDecimal - degrees) * 60
+    val minutes = minutesDecimal.toInt()
+    val seconds = ((minutesDecimal - minutes) * 60)
+
+    return String.format("%d° %d' %.4f\" %s", degrees, minutes, seconds, direction)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun VisualizeCQ(
+fun GetSoilData(
     navController: NavController,
+    landArea: String?,
+    length: String?,
+    width: String?,
     crop: String?,
-    cropQuantity: String?
 ) {
-    var showDetails by remember { mutableStateOf(false) }
     val dumaguete = LatLng(9.3093, 123.308)
     val cameraPositionState = rememberCameraPositionState {
         position = CameraPosition.fromLatLngZoom(dumaguete, 15f)
@@ -108,10 +71,64 @@ fun VisualizeCQ(
     var rotation by remember { mutableFloatStateOf(0f) }
     var showMyLocation by remember { mutableStateOf(true) }
     var polygonCenter by remember { mutableStateOf(dumaguete) }
+    var selectedDot by remember { mutableStateOf<LatLng?>(null) }
+    var showDialog by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val fusedLocationClient: FusedLocationProviderClient = remember { LocationServices.getFusedLocationProviderClient(context) }
+
+    // Calculate dots based on area with fixed minimum spacing
+    val area = landArea?.toDoubleOrNull() ?: 0.0
+    val minimumSpacing = 5.0 // minimum 5 meters between dots
+    val dotSpacing = max(minimumSpacing, sqrt(area / 100.0)) // Ensure minimum spacing and more dots
+
+    // State for dots with improved grid calculation
+    val dots = remember(polygonCenter, rotation, length, width, dotSpacing) {
+        val lengthInMeters = length?.toDoubleOrNull() ?: 0.0
+        val widthInMeters = width?.toDoubleOrNull() ?: 0.0
+        if (lengthInMeters <= 0 || widthInMeters <= 0) return@remember emptyList()
+
+        // Calculate number of dots that can fit in each dimension
+        val numDotsLength = max((lengthInMeters / dotSpacing).toInt(), 2)
+        val numDotsWidth = max((widthInMeters / dotSpacing).toInt(), 2)
+
+        val dots = mutableListOf<LatLng>()
+
+        // Create a grid of dots with proper spacing
+        for (i in 0 until numDotsLength) {
+            for (j in 0 until numDotsWidth) {
+                // Calculate the position of each dot within the rectangle
+                val x = if (numDotsWidth > 1) {
+                    (j.toDouble() / (numDotsWidth - 1)) * widthInMeters - (widthInMeters / 2)
+                } else {
+                    0.0
+                }
+
+                val y = if (numDotsLength > 1) {
+                    (i.toDouble() / (numDotsLength - 1)) * lengthInMeters - (lengthInMeters / 2)
+                } else {
+                    0.0
+                }
+
+                // Rotate the point
+                val angleRad = Math.toRadians(rotation.toDouble())
+                val rotatedX = x * cos(angleRad) - y * sin(angleRad)
+                val rotatedY = x * sin(angleRad) + y * cos(angleRad)
+
+                // Convert to LatLng
+                val centerLatRad = Math.toRadians(polygonCenter.latitude)
+                val latOffset = rotatedY / 111132.0 // Convert meters to degrees of latitude
+                val lonOffset = rotatedX / (111320.0 * cos(centerLatRad)) // Convert meters to degrees of longitude
+
+                dots.add(LatLng(
+                    polygonCenter.latitude + latOffset,
+                    polygonCenter.longitude + lonOffset
+                ))
+            }
+        }
+        dots
+    }
 
     var hasLocationPermission by remember {
         mutableStateOf(
@@ -140,11 +157,11 @@ fun VisualizeCQ(
                                 cameraPositionState.position = CameraPosition.fromLatLngZoom(result, 15f)
                                 polygonCenter = result
                             } else {
-                                Log.e("VisualizeCQ", "Failed to get location")
+                                Log.e("VisualizeLA", "Failed to get location")
                             }
                         }
                     } catch (e: SecurityException) {
-                        Log.e("VisualizeCQ", "SecurityException: ${e.message}")
+                        Log.e("VisualizeLA", "SecurityException: ${e.message}")
                     }
                 }
             } else {
@@ -154,16 +171,78 @@ fun VisualizeCQ(
         }
     )
 
+    var touchPosition by remember { mutableStateOf(LatLng(0.0, 0.0)) }
+    var isDragging by remember { mutableStateOf(false) }
+    var lastDragPosition by remember { mutableStateOf(Offset.Zero) }
     var isPolygonDragging by remember { mutableStateOf(false) }
-    var selectedMarkerPosition by remember { mutableStateOf<LatLng?>(null) }
-    var showMarkerDialog by remember { mutableStateOf(false) }
+
+    // Show dialog when a dot is selected
+    if (showDialog && selectedDot != null) {
+        Dialog(
+            onDismissRequest = {
+                showDialog = false
+                selectedDot = null
+            }
+        ) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = Color.White
+                )
+            ) {
+                Column(
+                    modifier = Modifier
+                        .padding(16.dp)
+                        .fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "Coordinates",
+                        style = MaterialTheme.typography.titleLarge
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Latitude: ${decimalToDMS(selectedDot!!.latitude, true)}",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                    Text(
+                        text = "Longitude: ${decimalToDMS(selectedDot!!.longitude, false)}",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Button(
+                        onClick = {
+                            // Handle receiving data
+                            // You can add your data receiving logic here
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Receive Data")
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    TextButton(
+                        onClick = {
+                            showDialog = false
+                            selectedDot = null
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Close")
+                    }
+                }
+            }
+        }
+    }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .pointerInput(Unit) {
                 detectDragGesturesAfterLongPress(
-                    onDragStart = { _ ->
+                    onDragStart = { offset ->
+                        lastDragPosition = offset
                         isPolygonDragging = true
                     },
                     onDragEnd = {
@@ -175,6 +254,8 @@ fun VisualizeCQ(
                     onDrag = { change, dragAmount ->
                         change.consume()
                         if (isPolygonDragging) {
+                            val currentPosition = lastDragPosition + Offset(dragAmount.x, dragAmount.y)
+                            lastDragPosition = currentPosition
 
                             val sensitivity = 0.25f
                             val centerLatRad = Math.toRadians(polygonCenter.latitude)
@@ -190,19 +271,8 @@ fun VisualizeCQ(
                 )
             }
     ) {
-        val areaPerPlant = when (crop) {
-            "Banana" -> 3.24
-            "Cassava" -> 1.0
-            "Sweet Potato" -> 0.23
-            "Mango" -> 400.0
-            "Corn" -> 0.38
-            else -> 0.0
-        }
-
-        val quantity = cropQuantity?.toDoubleOrNull() ?: 0.0
-        val estimatedLandArea = quantity * areaPerPlant
-        val lengthInMeters = sqrt(estimatedLandArea)
-        val widthInMeters = sqrt(estimatedLandArea)
+        val lengthInMeters = length?.toDoubleOrNull() ?: 0.0
+        val widthInMeters = width?.toDoubleOrNull() ?: 0.0
 
         val polygonPoints = remember(polygonCenter, rotation, lengthInMeters, widthInMeters) {
             if (lengthInMeters > 0 && widthInMeters > 0) {
@@ -248,52 +318,32 @@ fun VisualizeCQ(
                 rotationGesturesEnabled = true,
                 scrollGesturesEnabled = !isPolygonDragging,
                 zoomGesturesEnabled = !isPolygonDragging
-            )
+            ),
+            onMapClick = { // Clear selection when clicking on the map
+                selectedDot = null
+                showDialog = false
+            }
         ) {
             if (polygonPoints.isNotEmpty()) {
-                key(polygonPoints) {  // Add key to force recomposition when polygon moves
-                    Polygon(
-                        points = polygonPoints,
-                        fillColor = Color.Red.copy(alpha = 0.5f),
-                        strokeColor = Color.Red,
-                        strokeWidth = 5f
-                    )
+                Polygon(
+                    points = polygonPoints,
+                    fillColor = Color.Red.copy(alpha = 0.5f),
+                    strokeColor = Color.Red,
+                    strokeWidth = 5f
+                )
+            }
 
-                    val cropPositions = calculateCropPositions(
-                        polygonPoints,
-                        crop,
-                        cropQuantity?.toIntOrNull() ?: 0
-                    )
-
-                    cropPositions.forEach { position ->
-                        val markerState = rememberMarkerState(position = position)
-                        val icon = crop?.let { cropType ->
-                            CropData.crops[cropType]?.let { cropData ->
-                                val drawable = ContextCompat.getDrawable(context, cropData.iconResource)!!
-                                drawable.setBounds(0, 0, drawable.intrinsicWidth, drawable.intrinsicHeight)
-                                val bitmap = createBitmap(
-                                    width = drawable.intrinsicWidth,
-                                    height = drawable.intrinsicHeight,
-                                    config = Bitmap.Config.ARGB_8888
-                                )
-                                val canvas = Canvas(bitmap)
-                                drawable.draw(canvas)
-                                BitmapDescriptorFactory.fromBitmap(bitmap)
-                            }
-                        } ?: BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN)
-
-                        Marker(
-                            state = markerState,
-                            title = crop ?: "Crop",
-                            icon = icon,
-                            onClick = {
-                                selectedMarkerPosition = position
-                                showMarkerDialog = true
-                                true
-                            }
-                        )
+            // Draw all dots with click handling
+            dots.forEach { dot ->
+                Marker(
+                    state = MarkerState(position = dot),
+                    icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_BLUE),
+                    onClick = {
+                        selectedDot = dot
+                        showDialog = true
+                        true
                     }
-                }
+                )
             }
         }
 
@@ -340,11 +390,11 @@ fun VisualizeCQ(
                                     cameraPositionState.position = CameraPosition.fromLatLngZoom(result, 15f)
                                     polygonCenter = result
                                 } else {
-                                    Log.e("VisualizeCQ", "Failed to get location")
+                                    Log.e("VisualizeLA", "Failed to get location")
                                 }
                             }
                         } catch (e: SecurityException) {
-                            Log.e("VisualizeCQ", "SecurityException: ${e.message}")
+                            Log.e("VisualizeLA", "SecurityException: ${e.message}")
                         }
                     }
                 }
@@ -385,14 +435,14 @@ fun VisualizeCQ(
                 val lonOffset = moveDistance / (111320.0 * cos(centerLatRad))
                 polygonCenter = LatLng(polygonCenter.latitude, polygonCenter.longitude - lonOffset)
             }) {
-                Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Move Left", tint = Color.White)
+                Icon(Icons.Default.KeyboardArrowLeft, contentDescription = "Move Left", tint = Color.White)
             }
             IconButton(onClick = {
                 val centerLatRad = Math.toRadians(polygonCenter.latitude)
                 val lonOffset = moveDistance / (111320.0 * cos(centerLatRad))
                 polygonCenter = LatLng(polygonCenter.latitude, polygonCenter.longitude + lonOffset)
             }) {
-                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Move Right", tint = Color.White)
+                Icon(Icons.Default.KeyboardArrowRight, contentDescription = "Move Right", tint = Color.White)
             }
             IconButton(onClick = { showMyLocation = !showMyLocation }) {
                 Icon(if (showMyLocation) Icons.Default.MyLocation else Icons.Default.LocationOff, contentDescription = "Toggle My Location Layer", tint = Color.White)
@@ -405,50 +455,5 @@ fun VisualizeCQ(
                 }
             )
         }
-
-        Button(
-            onClick = { showDetails = true },
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 24.dp)
-        ) {
-            Text("Visualization Details", fontSize = 12.sp)
-        }
-
-        if (showDetails) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .height(300.dp)
-                    .background(Color.White)
-            ) {
-                VisualizationDetails2(
-                    crop = crop,
-                    cropQuantity = cropQuantity,
-                    onClose = { showDetails = false }
-                )
-            }
-        }
-
-        if (showMarkerDialog && selectedMarkerPosition != null) {
-            AlertDialog(
-                onDismissRequest = { showMarkerDialog = false },
-                title = { Text("Crop Location") },
-                text = {
-                    Column {
-                        Text("Coordinates:")
-                        Text(convertToDMS(selectedMarkerPosition!!.latitude, true))
-                        Text(convertToDMS(selectedMarkerPosition!!.longitude, false))
-                    }
-                },
-                confirmButton = {
-                    TextButton(onClick = { showMarkerDialog = false }) {
-                        Text("Close")
-                    }
-                }
-            )
-        }
     }
 }
-

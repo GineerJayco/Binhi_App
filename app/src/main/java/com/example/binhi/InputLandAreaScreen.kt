@@ -204,7 +204,7 @@ fun InputLandAreaScreen(navController: NavController) {
 
             if (isAreaSet) {
                  Button(
-                    onClick = { /* TODO: Get Soil Data */ },
+                    onClick = { navController.navigate("get_soil_data/$landArea/$length/$width/$selectedCrop") },
                     modifier = Modifier.fillMaxWidth().height(56.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
                 ) {
