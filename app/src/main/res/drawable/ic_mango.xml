@@ -4,11 +4,41 @@
     android:height="24dp"
     android:viewportWidth="24"
     android:viewportHeight="24">
+
+    <!-- Mango body -->
+    <path
+        android:fillColor="#FFC107"
+        android:pathData="
+            M6,8
+            C5,11 6,18 12,20
+            C17,21 21,16 20,11
+            C19,7 14,4 9,5
+            C7,6 6,7 6,8 Z"/>
+
+    <!-- Mango highlight -->
+    <path
+        android:fillColor="#FFD54F"
+        android:fillAlpha="0.6"
+        android:pathData="
+            M9,8
+            C8,11 9,15 12,17
+            C14,18 16,15 15,11
+            C14,9 12,8 10,8 Z"/>
+
+    <!-- Stem -->
+    <path
+        android:fillColor="#6D4C41"
+        android:pathData="
+            M9.5,4
+            C9,5 9.5,6.5 10.5,7
+            C11.5,6.5 11.5,5 11,4 Z"/>
+
+    <!-- Leaf -->
     <path
         android:fillColor="#4CAF50"
-        android:pathData="M17,8C8,8 4,16 4,16s4,-2 8,-2s9,2 9,2s-4,-8 -13,-8"/>
-    <path
-        android:fillColor="#8BC34A"
-        android:pathData="M14,4c-6,0 -10,4 -10,4s4,2 7,2s7,-2 7,-2s-4,-4 -10,-4"/>
-</vector>
+        android:pathData="
+            M10,4
+            C14,3 18,4 19,6
+            C16,6 13,6.5 11,7 Z"/>
 
+</vector>

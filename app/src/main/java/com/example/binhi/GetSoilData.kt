@@ -8,6 +8,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.RotateLeft
@@ -21,11 +24,13 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
@@ -35,6 +40,11 @@ import com.google.maps.android.compose.*
 import kotlin.math.*
 import com.google.android.gms.location.FusedLocationProviderClient
 import kotlinx.coroutines.launch
+import com.example.binhi.bluetooth.BluetoothClassicManager
+import com.example.binhi.bluetooth.BluetoothPermissionHelper
+import com.example.binhi.bluetooth.SoilSensorData
+import com.example.binhi.data.SoilData
+import com.example.binhi.viewmodel.SoilDataViewModel
 
 // Utility function to convert decimal degrees to DMS format
 private fun decimalToDMS(decimal: Double, isLatitude: Boolean): String {
@@ -62,6 +72,7 @@ fun GetSoilData(
     length: String?,
     width: String?,
     crop: String?,
+    soilDataViewModel: SoilDataViewModel = viewModel()
 ) {
     val dumaguete = LatLng(9.3093, 123.308)
     val cameraPositionState = rememberCameraPositionState {
@@ -77,6 +88,20 @@ fun GetSoilData(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val fusedLocationClient: FusedLocationProviderClient = remember { LocationServices.getFusedLocationProviderClient(context) }
+
+    // Bluetooth state
+    val bluetoothManager = remember { BluetoothClassicManager(context) }
+    var bluetoothResponse by remember { mutableStateOf<SoilSensorData?>(null) }
+    var showBluetoothDialog by remember { mutableStateOf(false) }
+    var isBluetoothLoading by remember { mutableStateOf(false) }
+    var hasBluetoothPermission by remember {
+        mutableStateOf(bluetoothManager.hasBluetoothPermissions())
+    }
+
+    // Soil data state for current dialog
+    var currentSoilData by remember { mutableStateOf<SoilData?>(null) }
+    var storedLocations by remember { mutableStateOf(setOf<LatLng>()) }
+    var showSaveSuccessMessage by remember { mutableStateOf(false) }
 
     // Calculate dots based on area with fixed minimum spacing
     val area = landArea?.toDoubleOrNull() ?: 0.0
@@ -125,9 +150,16 @@ fun GetSoilData(
                     polygonCenter.latitude + latOffset,
                     polygonCenter.longitude + lonOffset
                 ))
+
             }
         }
         dots
+    }
+
+    // Update total dots count in ViewModel whenever dots change
+    LaunchedEffect(dots.size) {
+        soilDataViewModel.totalDotsCount = dots.size
+        Log.d("SoilData", "Dots grid created: ${dots.size} dots")
     }
 
     var hasLocationPermission by remember {
@@ -171,10 +203,34 @@ fun GetSoilData(
         }
     )
 
+    // Bluetooth permission launcher for multiple permissions
+    val bluetoothPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions(),
+        onResult = { permissions ->
+            val allGranted = permissions.values.all { it }
+            hasBluetoothPermission = allGranted
+            if (!allGranted) {
+                bluetoothResponse = SoilSensorData(
+                    isError = true,
+                    errorMessage = "Bluetooth permissions were denied"
+                )
+                showBluetoothDialog = true
+            }
+        }
+    )
+
     var touchPosition by remember { mutableStateOf(LatLng(0.0, 0.0)) }
     var isDragging by remember { mutableStateOf(false) }
     var lastDragPosition by remember { mutableStateOf(Offset.Zero) }
     var isPolygonDragging by remember { mutableStateOf(false) }
+
+    // Update stored locations whenever selectedDot changes or data is saved
+    LaunchedEffect(selectedDot) {
+        if (selectedDot != null && soilDataViewModel.hasSoilData(selectedDot!!) && currentSoilData == null) {
+            // Load existing soil data when dot is selected
+            currentSoilData = soilDataViewModel.getSoilData(selectedDot!!)
+        }
+    }
 
     // Show dialog when a dot is selected
     if (showDialog && selectedDot != null) {
@@ -182,11 +238,12 @@ fun GetSoilData(
             onDismissRequest = {
                 showDialog = false
                 selectedDot = null
+                currentSoilData = null
             }
         ) {
             Card(
                 modifier = Modifier
-                    .fillMaxWidth()
+                    .fillMaxWidth(0.95f)
                     .padding(16.dp),
                 colors = CardDefaults.cardColors(
                     containerColor = Color.White
@@ -195,42 +252,275 @@ fun GetSoilData(
                 Column(
                     modifier = Modifier
                         .padding(16.dp)
-                        .fillMaxWidth(),
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        text = "Coordinates",
+                        text = "Sample Location",
                         style = MaterialTheme.typography.titleLarge
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = "Latitude: ${decimalToDMS(selectedDot!!.latitude, true)}",
-                        style = MaterialTheme.typography.bodyLarge
+                        style = MaterialTheme.typography.bodySmall
                     )
                     Text(
                         text = "Longitude: ${decimalToDMS(selectedDot!!.longitude, false)}",
-                        style = MaterialTheme.typography.bodyLarge
+                        style = MaterialTheme.typography.bodySmall
                     )
-                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Divider(modifier = Modifier.padding(vertical = 12.dp))
+
+                    // Show existing data if available
+                    if (currentSoilData != null) {
+                        Text(
+                            text = "Stored Soil Data",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = Color.Green
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Display all soil data fields in a grid
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            DataRow("Nitrogen", "${currentSoilData!!.nitrogen}")
+                            DataRow("Phosphorus", "${currentSoilData!!.phosphorus}")
+                            DataRow("Potassium", "${currentSoilData!!.potassium}")
+                            DataRow("pH Level", String.format("%.2f", currentSoilData!!.phLevel))
+                            DataRow("Temperature", String.format("%.1f", currentSoilData!!.temperature) + "°C")
+                            DataRow("Moisture", "${currentSoilData!!.moisture}%")
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+                    } else {
+                        // Show receive data button when no data exists
+                        Text(
+                            text = "No Data Stored",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = Color.Gray
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                    }
+
                     Button(
                         onClick = {
-                            // Handle receiving data
-                            // You can add your data receiving logic here
+                            // Check permissions first
+                            if (!hasBluetoothPermission) {
+                                bluetoothPermissionLauncher.launch(
+                                    BluetoothPermissionHelper.getRequiredPermissions()
+                                )
+                            } else {
+                                // Permissions granted, proceed with Bluetooth communication
+                                isBluetoothLoading = true
+                                coroutineScope.launch {
+                                    try {
+                                        // Send READ command and receive data
+                                        val response = bluetoothManager.sendCommandAndReceive("READ\n")
+                                        // Parse the response
+                                        bluetoothResponse = SoilSensorData.fromResponse(response)
+                                    } catch (e: Exception) {
+                                        bluetoothResponse = SoilSensorData(
+                                            rawData = e.message ?: "Unknown error",
+                                            isError = true,
+                                            errorMessage = "Failed to receive data: ${e.message}"
+                                        )
+                                    } finally {
+                                        isBluetoothLoading = false
+                                        showBluetoothDialog = true
+                                    }
+                                }
+                            }
                         },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !isBluetoothLoading
                     ) {
-                        Text("Receive Data")
+                        if (isBluetoothLoading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier
+                                    .size(20.dp)
+                                    .padding(end = 8.dp),
+                                strokeWidth = 2.dp,
+                                color = Color.White
+                            )
+                            Text("Receiving...")
+                        } else {
+                            Text("Receive Data")
+                        }
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                     TextButton(
                         onClick = {
                             showDialog = false
                             selectedDot = null
+                            currentSoilData = null
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text("Close")
                     }
+                }
+            }
+        }
+    }
+
+    // Bluetooth Response Dialog
+    if (showBluetoothDialog && bluetoothResponse != null) {
+        Dialog(
+            onDismissRequest = {
+                showBluetoothDialog = false
+                bluetoothResponse = null
+            }
+        ) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth(0.95f)
+                    .padding(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = Color.White
+                )
+            ) {
+                Column(
+                    modifier = Modifier
+                        .padding(16.dp)
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = if (bluetoothResponse!!.isError) "Error" else "Received Soil Data",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = if (bluetoothResponse!!.isError) Color.Red else Color.Green
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    if (bluetoothResponse!!.isError) {
+                        Text(
+                            text = bluetoothResponse!!.errorMessage,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = Color.Red
+                        )
+                    } else {
+                        // Display all soil data fields
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            DataRow("Nitrogen", "${bluetoothResponse!!.nitrogen}")
+                            DataRow("Phosphorus", "${bluetoothResponse!!.phosphorus}")
+                            DataRow("Potassium", "${bluetoothResponse!!.potassium}")
+                            DataRow("pH Level", String.format("%.2f", bluetoothResponse!!.phLevel))
+                            DataRow("Temperature", String.format("%.1f", bluetoothResponse!!.temperature) + "°C")
+                            DataRow("Moisture", "${bluetoothResponse!!.moisture}%")
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "Raw: ${bluetoothResponse!!.rawData}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.Gray
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    if (!bluetoothResponse!!.isError && selectedDot != null) {
+                        Button(
+                            onClick = {
+                                // Convert to SoilData and save
+                                val soilData = bluetoothResponse!!.toSoilData()
+                                if (soilData != null) {
+                                    if (soilDataViewModel.saveSoilData(selectedDot!!, soilData)) {
+                                        // Debug logging
+                                        Log.d("SoilData", "✓ Data saved for dot: $selectedDot")
+                                        Log.d("SoilData", "Total dots: ${soilDataViewModel.totalDotsCount}")
+                                        Log.d("SoilData", "Saved dots: ${soilDataViewModel.getStoredDataCount()}")
+                                        Log.d("SoilData", "All complete? ${soilDataViewModel.allDotsComplete}")
+
+                                        currentSoilData = soilData
+                                        showSaveSuccessMessage = true
+                                        // Auto-close success message after 2 seconds
+                                        coroutineScope.launch {
+                                            kotlinx.coroutines.delay(2000)
+                                            showSaveSuccessMessage = false
+                                            showBluetoothDialog = false
+                                            bluetoothResponse = null
+                                            showDialog = false
+                                            selectedDot = null
+                                        }
+                                    }
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF4CAF50)
+                            )
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = "Save",
+                                modifier = Modifier.size(20.dp),
+                                tint = Color.White
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Save Data")
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+
+                    Button(
+                        onClick = {
+                            showBluetoothDialog = false
+                            bluetoothResponse = null
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Close")
+                    }
+                }
+            }
+        }
+    }
+
+    // Success message
+    if (showSaveSuccessMessage) {
+        Dialog(
+            onDismissRequest = { showSaveSuccessMessage = false }
+        ) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth(0.8f)
+                    .padding(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = Color(0xFF4CAF50)
+                )
+            ) {
+                Column(
+                    modifier = Modifier
+                        .padding(24.dp)
+                        .fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.CheckCircle,
+                        contentDescription = "Success",
+                        modifier = Modifier.size(48.dp),
+                        tint = Color.White
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "Data Saved Successfully!",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = Color.White
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Marker color changed to green",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White
+                    )
                 }
             }
         }
@@ -335,11 +625,18 @@ fun GetSoilData(
 
             // Draw all dots with click handling
             dots.forEach { dot ->
+                val markerColor = if (soilDataViewModel.hasSoilData(dot)) {
+                    BitmapDescriptorFactory.HUE_GREEN // Green for saved data
+                } else {
+                    BitmapDescriptorFactory.HUE_BLUE // Blue for unsaved
+                }
+
                 Marker(
                     state = MarkerState(position = dot),
-                    icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_BLUE),
+                    icon = BitmapDescriptorFactory.defaultMarker(markerColor),
                     onClick = {
                         selectedDot = dot
+                        currentSoilData = null // Reset to load from ViewModel
                         showDialog = true
                         true
                     }
@@ -455,5 +752,67 @@ fun GetSoilData(
                 }
             )
         }
+
+        // Get Crop Recommendation button - always visible, enabled only when all dots are complete
+        val isButtonEnabled = soilDataViewModel.allDotsComplete
+        val savedDotsCount = soilDataViewModel.getStoredDataCount()
+        val totalDots = soilDataViewModel.totalDotsCount
+
+        Button(
+            onClick = {
+                Log.d("GetSoilData", "Get Crop Recommendation clicked - All ${soilDataViewModel.totalDotsCount} dots have data")
+            },
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 32.dp)
+                .fillMaxWidth(0.85f)
+                .height(48.dp),
+            shape = RoundedCornerShape(12.dp),
+            enabled = isButtonEnabled,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color(0xFF2196F3),
+                disabledContainerColor = Color.Gray
+            )
+        ) {
+            Icon(
+                imageVector = Icons.Default.Agriculture,
+                contentDescription = "Get Recommendation",
+                modifier = Modifier.size(20.dp),
+                tint = Color.White
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = "Get Crop Recommendation",
+                fontSize = 14.sp,
+                color = Color.White
+            )
+        }
     }
 }
+
+/**
+ * Helper composable to display a labeled data row
+ */
+@Composable
+private fun DataRow(label: String, value: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color.LightGray.copy(alpha = 0.3f), shape = RoundedCornerShape(4.dp))
+            .padding(12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.weight(1f)
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+        )
+    }
+}
+

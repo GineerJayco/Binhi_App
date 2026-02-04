@@ -4,8 +4,31 @@
     android:height="24dp"
     android:viewportWidth="24"
     android:viewportHeight="24">
+
+    <!-- Main sweet potato body -->
     <path
-        android:fillColor="#FF7043"
-        android:pathData="M12,2C6.48,2 2,6.48 2,12s4.48,10 10,10 10,-4.48 10,-10S17.52,2 12,2z"/>
+        android:fillColor="#C65A4A"
+        android:pathData="
+            M3,12
+            C3,8 6,5 10,4
+            C14,3 19,6 21,10
+            C22,13 20,17 16,19
+            C12,21 6,20 4,16
+            C3.5,14.5 3,13 3,12
+            Z" />
+
+    <!-- Slight highlight for realism -->
+    <path
+        android:fillColor="#D97A6A"
+        android:fillAlpha="0.6"
+        android:pathData="
+            M6,11
+            C7,8 10,6 13,6
+            C15,6 17,8 18,10
+            C16,9 14,9 12,10
+            C9,11 7,12 6,11
+            Z" />
+
 </vector>
+
 

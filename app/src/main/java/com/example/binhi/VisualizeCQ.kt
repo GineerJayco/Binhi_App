@@ -55,10 +55,7 @@ private fun calculateCropPositions(
     cropType: String?,
     estimatedQuantity: Int
 ): List<LatLng> {
-    if (polygonPoints.isEmpty() || cropType == null) return emptyList()
-
-    val cropPlanting = CropData.crops[cropType] ?: return emptyList()
-    val plantingDistance = cropPlanting.plantingDistance
+    if (polygonPoints.isEmpty() || cropType == null || estimatedQuantity <= 0) return emptyList()
 
     // Calculate the dimensions of the plot
     val minLat = polygonPoints.minOf { it.latitude }
@@ -66,27 +63,39 @@ private fun calculateCropPositions(
     val minLng = polygonPoints.minOf { it.longitude }
     val maxLng = polygonPoints.maxOf { it.longitude }
 
-    // Convert planting distance to approximate degree values
-    val latDistance = plantingDistance / 111111.0 // approximate degrees per meter at the equator
-    val lngDistance = plantingDistance / (111111.0 * cos(Math.toRadians((minLat + maxLat) / 2)))
-
     val positions = mutableListOf<LatLng>()
-    var currentLat = minLat + latDistance / 2
-    var row = 0
 
-    while (currentLat <= maxLat - latDistance / 2 && positions.size < estimatedQuantity) {
-        var currentLng = minLng + lngDistance / 2
-        if (row % 2 == 1) currentLng += lngDistance / 2 // Offset alternate rows for square system
+    // Create a grid based on the requested quantity
+    // Calculate how many crops we can fit per row and how many rows we need
+    val cropsPerRow = max(1, sqrt(estimatedQuantity.toDouble()).toInt())
+    val numRows = (estimatedQuantity + cropsPerRow - 1) / cropsPerRow  // Ceiling division
 
-        while (currentLng <= maxLng - lngDistance / 2 && positions.size < estimatedQuantity) {
-            val position = LatLng(currentLat, currentLng)
+    // Calculate the spacing needed to fit all crops within the polygon
+    val actualWidth = maxLng - minLng
+    val actualHeight = maxLat - minLat
+
+    // Adjust spacing to fit the requested quantity within available space
+    val effectiveColSpacing = if (cropsPerRow > 1) actualWidth / cropsPerRow else actualWidth
+    val effectiveRowSpacing = if (numRows > 1) actualHeight / numRows else actualHeight
+
+    // Place crops at the center of each grid cell
+    var cropsPlaced = 0
+    for (row in 0 until numRows) {
+        for (col in 0 until cropsPerRow) {
+            if (cropsPlaced >= estimatedQuantity) break
+
+            // Calculate center position of this grid cell
+            val cellCenterLat = minLat + (row + 0.5) * effectiveRowSpacing
+            val cellCenterLng = minLng + (col + 0.5) * effectiveColSpacing
+
+            val position = LatLng(cellCenterLat, cellCenterLng)
+
+            // Only add position if it's inside the polygon
             if (isPointInsidePolygon(position, polygonPoints)) {
                 positions.add(position)
+                cropsPlaced++
             }
-            currentLng += lngDistance
         }
-        currentLat += latDistance
-        row++
     }
 
     return positions
@@ -190,14 +199,7 @@ fun VisualizeCQ(
                 )
             }
     ) {
-        val areaPerPlant = when (crop) {
-            "Banana" -> 3.24
-            "Cassava" -> 1.0
-            "Sweet Potato" -> 0.23
-            "Mango" -> 400.0
-            "Corn" -> 0.38
-            else -> 0.0
-        }
+        val areaPerPlant = CropData.crops[crop]?.areaPerPlant ?: 0.0
 
         val quantity = cropQuantity?.toDoubleOrNull() ?: 0.0
         val estimatedLandArea = quantity * areaPerPlant
@@ -259,10 +261,13 @@ fun VisualizeCQ(
                         strokeWidth = 5f
                     )
 
+                    // Use the user's input quantity directly for the number of crops to display
+                    val estimatedQuantity = cropQuantity?.toDoubleOrNull()?.toInt() ?: 0
+
                     val cropPositions = calculateCropPositions(
                         polygonPoints,
                         crop,
-                        cropQuantity?.toIntOrNull() ?: 0
+                        estimatedQuantity
                     )
 
                     cropPositions.forEach { position ->
@@ -270,10 +275,14 @@ fun VisualizeCQ(
                         val icon = crop?.let { cropType ->
                             CropData.crops[cropType]?.let { cropData ->
                                 val drawable = ContextCompat.getDrawable(context, cropData.iconResource)!!
-                                drawable.setBounds(0, 0, drawable.intrinsicWidth, drawable.intrinsicHeight)
+                                // Scale down icons to 60% of original size
+                                val scaleFactor = 0.4
+                                val scaledWidth = (drawable.intrinsicWidth * scaleFactor).toInt()
+                                val scaledHeight = (drawable.intrinsicHeight * scaleFactor).toInt()
+                                drawable.setBounds(0, 0, scaledWidth, scaledHeight)
                                 val bitmap = createBitmap(
-                                    width = drawable.intrinsicWidth,
-                                    height = drawable.intrinsicHeight,
+                                    width = scaledWidth,
+                                    height = scaledHeight,
                                     config = Bitmap.Config.ARGB_8888
                                 )
                                 val canvas = Canvas(bitmap)

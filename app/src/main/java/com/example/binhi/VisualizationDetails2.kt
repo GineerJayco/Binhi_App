@@ -21,14 +21,7 @@ fun VisualizationDetails2(
     cropQuantity: String?,
     onClose: () -> Unit
 ) {
-    val areaPerPlant = when (crop) {
-        "Banana" -> 3.24
-        "Cassava" -> 1.0
-        "Sweet Potato" -> 0.23
-        "Mango" -> 400.0
-        "Corn" -> 0.38
-        else -> 0.0
-    }
+    val areaPerPlant = CropData.crops[crop]?.areaPerPlant ?: 0.0
 
     val quantity = cropQuantity?.toDoubleOrNull() ?: 0.0
     val estimatedLandArea = quantity * areaPerPlant

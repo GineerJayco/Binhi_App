@@ -4,19 +4,17 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
 
-    <!-- Location Permissions (already there) -->
+    <!-- Location Permissions -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
 
-    <!-- ADD THESE LINES for Bluetooth on Android 12+ -->
-    <uses-permission
-        android:name="android.permission.BLUETOOTH"
-        android:maxSdkVersion="30" />
-    <uses-permission
-        android:name="android.permission.BLUETOOTH_ADMIN"
-        android:maxSdkVersion="30" />
+    <!-- Bluetooth Permissions (Android 12+) -->
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <!-- Bluetooth Permissions (Below Android 12) -->
+    <uses-permission android:name="android.permission.BLUETOOTH" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
+
 
     <application
         android:allowBackup="true"
@@ -30,7 +28,7 @@
 
         <meta-data
             android:name="com.google.android.geo.API_KEY"
-            android:value="AIzaSyDfeNuFFnL_6lzHfU27rl8k3lah-KSsAmA" />
+            android:value="AIzaSyDiOOHL-OjA1A2jYO35u5E2HBrEjB7ugpo" />
 
         <activity
             android:name=".MainUI"
