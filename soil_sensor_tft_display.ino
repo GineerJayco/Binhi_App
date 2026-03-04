@@ -2,12 +2,14 @@
    ESP32 SOIL SENSOR DATA DISPLAY
 
    This sketch displays soil sensor data on a 3.2" TFT LCD (ILI9341)
-   with touch support (XPT2046) and Bluetooth Serial communication.
+   with touch support (XPT2046), Bluetooth Serial communication, and
+   RS485 NPK soil sensor integration.
 
    Hardware:
    - ESP32 Dev Module
    - 3.2" SPI TFT LCD (240x320, ILI9341)
    - XPT2046 Touch Controller
+   - RS485 NPK Soil Sensor
 
    Pin Configuration:
    LCD:
@@ -27,6 +29,14 @@
    - DIN -> GPIO 23
    - DO -> GPIO 19
 
+   RS485 Sensor (TTL to RS485 Module):
+   - DI (TX) -> GPIO 17
+   - RO (RX) -> GPIO 16
+   - DE (Direction Enable) -> GPIO 21
+   - RE (Receiver Enable) -> GPIO 21 (connected with DE)
+   - VCC -> 5V or 3.3V
+   - GND -> GND
+
    Libraries Required:
    - Adafruit_GFX
    - Adafruit_ILI9341
@@ -39,6 +49,7 @@
 #include <Adafruit_ILI9341.h>
 #include <XPT2046_Touchscreen.h>
 #include <BluetoothSerial.h>
+#include <HardwareSerial.h>
 
 // ============================================================================
 // DISPLAY SETUP (ILI9341)
@@ -80,6 +91,31 @@ BluetoothSerial SerialBT;
 #define DEVICE_NAME "ESP32_SOIL_SENSOR"
 
 // ============================================================================
+// RS485 SENSOR SETUP
+// ============================================================================
+
+// RS485 Module pins
+#define RS485_RX_PIN 16      // RO (Receiver Output) from RS485 module
+#define RS485_TX_PIN 17      // DI (Driver Input) from RS485 module
+#define RS485_DE_PIN 21      // DE (Driver Enable) for RS485 module
+#define RS485_RE_PIN 21      // RE (Receiver Enable) for RS485 module (same as DE)
+
+// RS485 serial communication
+HardwareSerial RS485Serial(1);  // Use UART1 on ESP32
+#define RS485_BAUD_RATE 4800
+
+// RS485 sensor query command
+// Format: {0x01, 0x03, 0x00, 0x00, 0x00, 0x07, 0x04, 0x08}
+// Device ID: 0x01, Function: 0x03 (Read Holding Registers), Start: 0x0000, Count: 0x0007, CRC: 0x0408
+const byte RS485_QUERY[] = {0x01, 0x03, 0x00, 0x00, 0x00, 0x07, 0x04, 0x08};
+const int RS485_QUERY_SIZE = sizeof(RS485_QUERY);
+const int RS485_RESPONSE_SIZE = 19;  // Expected response size
+
+// RS485 sensor reading interval
+#define RS485_READ_INTERVAL 5000  // Read sensor every 5 seconds (milliseconds)
+unsigned long lastSensorReadTime = 0;
+
+// ============================================================================
 // SOIL DATA STRUCTURE
 // ============================================================================
 
@@ -89,7 +125,8 @@ struct SoilData {
   float potassium;     // Potassium (K) in mg/kg
   float pH;            // pH level (0-14)
   float temperature;   // Temperature in Celsius
-  float moisture;      // Moisture in percentage (0-100)
+  float moisture;      // Moisture/Humidity in percentage (0-100)
+  float conductivity;  // Electrical conductivity in mS/cm
 };
 
 SoilData soilData = {
@@ -98,7 +135,8 @@ SoilData soilData = {
   9.0,     // Potassium
   6.5,     // pH
   29.4,    // Temperature
-  62.0     // Moisture
+  62.0,    // Moisture
+  1250.0   // Conductivity
 };
 
 // ============================================================================
@@ -134,6 +172,16 @@ void setup() {
   delay(1000);
 
   Serial.println("\n\n=== ESP32 Soil Sensor Display ===");
+
+  // Initialize RS485 serial communication
+  RS485Serial.begin(RS485_BAUD_RATE, SERIAL_8N1, RS485_RX_PIN, RS485_TX_PIN);
+  Serial.println("RS485 Serial initialized at " + String(RS485_BAUD_RATE) + " baud");
+
+  // Setup RS485 control pins
+  pinMode(RS485_DE_PIN, OUTPUT);
+  pinMode(RS485_RE_PIN, OUTPUT);
+  digitalWrite(RS485_DE_PIN, LOW);  // Initially set to receive mode
+  digitalWrite(RS485_RE_PIN, LOW);
 
   // Initialize TFT display
   tft.begin();
@@ -173,6 +221,12 @@ void loop() {
   // Check for Bluetooth commands
   handleBluetoothInput();
 
+  // Read sensor data periodically
+  if (millis() - lastSensorReadTime >= RS485_READ_INTERVAL) {
+    readRS485Sensor();
+    lastSensorReadTime = millis();
+  }
+
   // Redraw UI if button was pressed (for highlight effect)
   if (dataReadyToSend && (millis() - lastButtonPressTime) < BUTTON_HIGHLIGHT_DURATION) {
     // Keep showing pressed state
@@ -182,6 +236,100 @@ void loop() {
   }
 
   delay(50);  // Non-blocking: small delay for responsiveness
+}
+
+// ============================================================================
+// RS485 SENSOR READING
+// ============================================================================
+
+void readRS485Sensor() {
+  // Clear any remaining data in the buffer
+  while (RS485Serial.available()) {
+    RS485Serial.read();
+  }
+
+  // Set RS485 module to transmit mode
+  digitalWrite(RS485_DE_PIN, HIGH);
+  digitalWrite(RS485_RE_PIN, HIGH);
+  delay(10);
+
+  // Send query command to sensor
+  RS485Serial.write(RS485_QUERY, RS485_QUERY_SIZE);
+  RS485Serial.flush();  // Wait for transmission to complete
+
+  // Switch RS485 module to receive mode
+  digitalWrite(RS485_DE_PIN, LOW);
+  digitalWrite(RS485_RE_PIN, LOW);
+  delay(10);
+
+  // Wait for sensor response
+  unsigned long timeout = millis();
+  while (RS485Serial.available() < RS485_RESPONSE_SIZE && (millis() - timeout) < 1000) {
+    delay(10);
+  }
+
+  // Check if we received the expected number of bytes
+  if (RS485Serial.available() >= RS485_RESPONSE_SIZE) {
+    byte receivedData[RS485_RESPONSE_SIZE];
+    RS485Serial.readBytes(receivedData, RS485_RESPONSE_SIZE);
+
+    // Parse the received data and extract sensor values
+    parseRS485Data(receivedData);
+  } else {
+    Serial.println("ERROR: Incomplete RS485 sensor response");
+  }
+}
+
+void parseRS485Data(byte* data) {
+  // Data format from RS485 sensor:
+  // Byte 0: Device ID (0x01)
+  // Byte 1: Function (0x03)
+  // Byte 2: Byte count (0x0E = 14 bytes)
+  // Bytes 3-4: Soil Humidity (16-bit)
+  // Bytes 5-6: Soil Temperature (16-bit)
+  // Bytes 7-8: Soil Conductivity (16-bit)
+  // Bytes 9-10: Soil pH (16-bit)
+  // Bytes 11-12: Nitrogen (16-bit)
+  // Bytes 13-14: Phosphorus (16-bit)
+  // Bytes 15-16: Potassium (16-bit)
+  // Bytes 17-18: CRC (2 bytes)
+
+  // Extract 16-bit values (MSB first)
+  unsigned int rawMoisture = (data[3] << 8) | data[4];
+  unsigned int rawTemperature = (data[5] << 8) | data[6];
+  unsigned int rawConductivity = (data[7] << 8) | data[8];
+  unsigned int rawPH = (data[9] << 8) | data[10];
+  unsigned int rawNitrogen = (data[11] << 8) | data[12];
+  unsigned int rawPhosphorus = (data[13] << 8) | data[14];
+  unsigned int rawPotassium = (data[15] << 8) | data[16];
+
+  // Convert raw values to physical units
+  // Humidity: divide by 10
+  // Temperature: divide by 10
+  // Conductivity: as is (in µS/cm, may need adjustment for mS/cm)
+  // pH: divide by 10
+  // NPK: as is (in mg/kg)
+
+  soilData.moisture = (float)rawMoisture / 10.0;
+  soilData.temperature = (float)rawTemperature / 10.0;
+  soilData.conductivity = (float)rawConductivity;
+  soilData.pH = (float)rawPH / 10.0;
+  soilData.nitrogen = (float)rawNitrogen;
+  soilData.phosphorus = (float)rawPhosphorus;
+  soilData.potassium = (float)rawPotassium;
+
+  // Redraw display with new data
+  drawSoilDataDisplay();
+
+  // Log data to serial
+  Serial.println("RS485 Sensor Data Updated:");
+  Serial.print("  Moisture: "); Serial.print(soilData.moisture); Serial.println("%");
+  Serial.print("  Temperature: "); Serial.print(soilData.temperature); Serial.println("°C");
+  Serial.print("  Conductivity: "); Serial.print(soilData.conductivity); Serial.println("µS/cm");
+  Serial.print("  pH: "); Serial.println(soilData.pH);
+  Serial.print("  N: "); Serial.print(soilData.nitrogen); Serial.println("mg/kg");
+  Serial.print("  P: "); Serial.print(soilData.phosphorus); Serial.println("mg/kg");
+  Serial.print("  K: "); Serial.print(soilData.potassium); Serial.println("mg/kg");
 }
 
 // ============================================================================
@@ -264,6 +412,9 @@ void drawSoilDataDisplay() {
   y_offset += line_spacing;
 
   drawDataField("Moisture (%):", soilData.moisture, y_offset, 6);
+  y_offset += line_spacing;
+
+  drawDataField("Conductivity:", soilData.conductivity, y_offset, 7);
 
   // Draw save button
   drawSaveButton(false);
@@ -305,6 +456,8 @@ void drawDataField(const char* label, float value, int y, uint8_t fieldNum) {
     sprintf(valueStr, "%.1f", value);
   } else if (fieldNum == 5 || fieldNum == 6) {  // Temperature and Moisture - 1 decimal place
     sprintf(valueStr, "%.1f", value);
+  } else if (fieldNum == 7) {  // Conductivity - whole number
+    sprintf(valueStr, "%.0f", value);
   } else {  // NPK - whole numbers
     sprintf(valueStr, "%.0f", value);
   }
@@ -380,16 +533,17 @@ void handleReadCommand() {
 }
 
 void sendSoilData() {
-  // Format: NPK=12,7,9;PH=6.5;TEMP=29.4;MOIST=62\n
-  char dataStr[100];
+  // Format: NPK=12,7,9;PH=6.5;TEMP=29.4;MOIST=62;COND=1250\n
+  char dataStr[120];
 
-  sprintf(dataStr, "NPK=%.0f,%.0f,%.0f;PH=%.1f;TEMP=%.1f;MOIST=%.0f",
+  sprintf(dataStr, "NPK=%.0f,%.0f,%.0f;PH=%.1f;TEMP=%.1f;MOIST=%.0f;COND=%.0f",
           soilData.nitrogen,
           soilData.phosphorus,
           soilData.potassium,
           soilData.pH,
           soilData.temperature,
-          soilData.moisture);
+          soilData.moisture,
+          soilData.conductivity);
 
   // Send data with newline
   SerialBT.print(dataStr);
