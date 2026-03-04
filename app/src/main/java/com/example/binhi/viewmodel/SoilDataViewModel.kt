@@ -7,6 +7,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import com.google.android.gms.maps.model.LatLng
 import com.example.binhi.data.SoilData
+import com.example.binhi.data.SavedSession
 
 /**
  * ViewModel to manage soil data storage per map location
@@ -25,6 +26,11 @@ class SoilDataViewModel : ViewModel() {
      * This is set by the UI layer when dots are generated
      */
     var totalDotsCount by mutableStateOf(0)
+
+    /**
+     * Store all saved sessions
+     */
+    var savedSessions by mutableStateOf(listOf<SavedSession>())
 
     /**
      * Derived state that checks if all dots have saved soil data
@@ -114,6 +120,97 @@ class SoilDataViewModel : ViewModel() {
         } else {
             0
         }
+    }
+
+    /**
+     * Save current session with all map data and soil data
+     * @param sessionName Name for the saved session
+     * @param landArea Land area in square meters
+     * @param length Field length in meters
+     * @param width Field width in meters
+     * @param crop Crop name
+     * @param polygonCenter Center of the polygon
+     * @param rotation Current rotation of the polygon
+     * @param mapType Current map type (SATELLITE or NORMAL)
+     * @return The saved session
+     */
+    fun saveCurrentSession(
+        sessionName: String,
+        landArea: Double,
+        length: Double,
+        width: Double,
+        crop: String,
+        polygonCenter: LatLng,
+        rotation: Float,
+        mapType: String,
+        cameraZoom: Float = 15f
+    ): SavedSession {
+        // Convert LatLng keys to Pair for serialization
+        val soilDataMap = soilDataStorage.mapKeys { (latLng, _) ->
+            SavedSession.latLngToPair(latLng)
+        }
+
+        val session = SavedSession(
+            sessionName = sessionName,
+            landArea = landArea,
+            length = length,
+            width = width,
+            crop = crop,
+            polygonCenter = Pair(polygonCenter.latitude, polygonCenter.longitude),
+            rotation = rotation,
+            mapType = mapType,
+            cameraZoom = cameraZoom,
+            totalDots = totalDotsCount,
+            soilDataPoints = soilDataMap
+        )
+
+        // Add to saved sessions list
+        savedSessions = savedSessions + session
+
+        return session
+    }
+
+    /**
+     * Load a saved session and restore its data
+     * @param session The session to load
+     */
+    fun loadSession(session: SavedSession) {
+        // Convert Pair keys back to LatLng
+        val restoredData = session.soilDataPoints.mapKeys { (pair, _) ->
+            SavedSession.pairToLatLng(pair)
+        }.toMutableMap()
+
+        soilDataStorage = restoredData
+        totalDotsCount = session.totalDots
+    }
+
+    /**
+     * Get all saved sessions
+     */
+    fun getAllSavedSessions(): List<SavedSession> {
+        return savedSessions
+    }
+
+    /**
+     * Delete a saved session
+     */
+    fun deleteSavedSession(sessionId: String) {
+        savedSessions = savedSessions.filter { it.id != sessionId }
+    }
+
+    /**
+     * Get a saved session by ID
+     */
+    fun getSavedSession(sessionId: String): SavedSession? {
+        return savedSessions.find { it.id == sessionId }
+    }
+
+    /**
+     * Clear current session state (for viewing/editing a saved session)
+     */
+    fun clearCurrentSession() {
+        soilDataStorage = mutableMapOf()
+        totalDotsCount = 0
     }
 }
 

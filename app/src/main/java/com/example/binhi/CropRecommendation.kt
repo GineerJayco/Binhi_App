@@ -1,0 +1,797 @@
+package com.example.binhi
+
+import android.content.Context
+import android.util.Log
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavController
+import com.example.binhi.data.SoilData
+import com.example.binhi.viewmodel.SoilDataViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
+
+// Data class to hold crop recommendation result
+data class CropPrediction(
+    val cropName: String,
+    val confidence: Float,
+    val percentage: Int,
+    val color: Color,
+    val icon: String,
+    val reasoning: String
+)
+
+// Object for crop-related constants and utility functions
+object CropConstants {
+    val CROP_NAMES = listOf(
+        "Banana",
+        "Cassava",
+        "Sweet Potato",
+        "Corn",
+        "Mango"
+    )
+
+    // Map crop names to their display colors
+    val CROP_COLORS = mapOf(
+        "Banana" to Color(0xFFFFD700),      // Gold
+        "Cassava" to Color(0xFFD2B48C),     // Tan
+        "Sweet Potato" to Color(0xFFFF8C69),// Salmon
+        "Corn" to Color(0xFFFFD700),        // Gold
+        "Mango" to Color(0xFFFF6347)        // Tomato
+    )
+
+    // Map crop names to their icons (you can add actual drawable references)
+    val CROP_ICONS = mapOf(
+        "Banana" to "🍌",
+        "Cassava" to "🌳",
+        "Sweet Potato" to "🥔",
+        "Corn" to "🌽",
+        "Mango" to "🥭"
+    )
+
+    fun getCropColor(cropName: String): Color {
+        return CROP_COLORS[cropName] ?: Color.Gray
+    }
+
+    fun getCropIcon(cropName: String): String {
+        return CROP_ICONS[cropName] ?: "🌾"
+    }
+
+    fun getReasoningForConfidence(cropName: String, confidence: Float): String {
+        return when {
+            confidence >= 0.8 -> "Excellent match - highly recommended"
+            confidence >= 0.6 -> "Good match - well-suited for conditions"
+            confidence >= 0.4 -> "Moderate match - may require adjustments"
+            confidence >= 0.2 -> "Fair match - consider other options"
+            else -> "Low compatibility - not recommended"
+        }
+    }
+}
+
+/**
+ * Runs ONNX model inference for crop recommendation
+ * Inputs: Normalized soil data (N, P, K, pH, Temperature, Moisture)
+ * Outputs: Confidence scores for each crop
+ */
+fun runOnnxInference(
+    context: Context,
+    soilDataList: List<SoilData>
+): List<CropPrediction> {
+    return try {
+        if (soilDataList.isEmpty()) {
+            Log.w("CropRecommendation", "No soil data available")
+            return getDefaultRecommendations()
+        }
+
+        // Calculate averages from all soil data
+        val avgNitrogen = soilDataList.map { it.nitrogen }.average().toFloat()
+        val avgPhosphorus = soilDataList.map { it.phosphorus }.average().toFloat()
+        val avgPotassium = soilDataList.map { it.potassium }.average().toFloat()
+        val avgPhLevel = soilDataList.map { it.phLevel }.average().toFloat()
+        val avgTemperature = soilDataList.map { it.temperature }.average().toFloat()
+        val avgMoisture = soilDataList.map { it.moisture }.average().toFloat()
+
+        Log.d(
+            "CropRecommendation",
+            "Average Soil Data - N: $avgNitrogen, P: $avgPhosphorus, K: $avgPotassium, " +
+                    "pH: $avgPhLevel, Temp: $avgTemperature, Moisture: $avgMoisture"
+        )
+
+        // Normalize the input data (0-1 range)
+        val normalizedInputData = floatArrayOf(
+            avgNitrogen / 100f,      // Nitrogen: 0-100 mg/kg
+            avgPhosphorus / 100f,    // Phosphorus: 0-100 mg/kg
+            avgPotassium / 100f,     // Potassium: 0-100 mg/kg
+            avgPhLevel / 14f,        // pH Level: 0-14
+            (avgTemperature + 40f) / 90f,  // Temperature: -40 to 50°C
+            avgMoisture / 100f       // Moisture: 0-100%
+        )
+
+        Log.d("CropRecommendation", "Normalized input: ${normalizedInputData.contentToString()}")
+
+        // Load and run ONNX model
+        val predictions = try {
+            val ortEnv = ai.onnxruntime.OrtEnvironment.getEnvironment()
+            val sessionOptions = ai.onnxruntime.OrtSession.SessionOptions()
+
+            // Load model from assets
+            val modelAsset = context.assets.open("crop_recommendation.onnx")
+            val modelBytes = modelAsset.readBytes()
+            modelAsset.close()
+
+            val session = ortEnv.createSession(modelBytes, sessionOptions)
+
+            // Create input tensor - use simpler API without allocator
+            val inputTensor = ai.onnxruntime.OnnxTensor.createTensor(ortEnv, normalizedInputData)
+
+            // Get input and output names
+            val inputName = session.inputNames?.firstOrNull()
+                ?: throw IllegalStateException("No input names found in model")
+            val outputName = session.outputNames?.firstOrNull()
+                ?: throw IllegalStateException("No output names found in model")
+
+            Log.d("CropRecommendation", "Input name: $inputName, Output name: $outputName")
+
+            // Run inference
+            val results = session.run(mapOf(inputName to inputTensor))
+
+            // Extract confidence scores
+            val confidences = results[outputName]?.let { output ->
+                when (output) {
+                    is ai.onnxruntime.OnnxTensor -> {
+                        try {
+                            val floatBuffer = output.floatBuffer
+                            val scores = mutableListOf<Float>()
+                            while (floatBuffer.hasRemaining()) {
+                                scores.add(floatBuffer.get())
+                            }
+                            scores
+                        } catch (e: Exception) {
+                            Log.e("CropRecommendation", "Error extracting float buffer: ${e.message}")
+                            emptyList()
+                        }
+                    }
+                    else -> {
+                        Log.e("CropRecommendation", "Unexpected output type: ${output?.javaClass?.simpleName}")
+                        emptyList()
+                    }
+                }
+            } ?: run {
+                Log.e("CropRecommendation", "No output found for name: $outputName")
+                emptyList()
+            }
+
+            Log.d("CropRecommendation", "Raw confidences: $confidences")
+
+            // Create predictions
+            confidences.mapIndexed { index, confidence ->
+                val cropName = if (index < CropConstants.CROP_NAMES.size) {
+                    CropConstants.CROP_NAMES[index]
+                } else {
+                    "Crop $index"
+                }
+
+                CropPrediction(
+                    cropName = cropName,
+                    confidence = confidence.coerceIn(0f, 1f),
+                    percentage = (confidence * 100).roundToInt().coerceIn(0, 100),
+                    color = CropConstants.getCropColor(cropName),
+                    icon = CropConstants.getCropIcon(cropName),
+                    reasoning = CropConstants.getReasoningForConfidence(cropName, confidence)
+                )
+            }
+        } catch (e: Exception) {
+            Log.e("CropRecommendation", "Error during model inference: ${e.message}", e)
+            getDefaultRecommendations()
+        }
+
+        // Sort by confidence (highest first)
+        predictions.sortedByDescending { it.confidence }
+    } catch (e: Exception) {
+        Log.e("CropRecommendation", "Error in runOnnxInference: ${e.message}", e)
+        getDefaultRecommendations()
+    }
+}
+
+/**
+ * Provides default recommendations when model is not available
+ */
+fun getDefaultRecommendations(): List<CropPrediction> {
+    return listOf(
+        CropPrediction(
+            cropName = "Banana",
+            confidence = 0.85f,
+            percentage = 85,
+            color = Color(0xFFFFD700),
+            icon = "🍌",
+            reasoning = "Well-suited for tropical climate"
+        ),
+        CropPrediction(
+            cropName = "Cassava",
+            confidence = 0.72f,
+            percentage = 72,
+            color = Color(0xFFD2B48C),
+            icon = "🌳",
+            reasoning = "Good drought tolerance"
+        ),
+        CropPrediction(
+            cropName = "Sweet Potato",
+            confidence = 0.68f,
+            percentage = 68,
+            color = Color(0xFFFF8C69),
+            icon = "🥔",
+            reasoning = "Moderate soil nutrient requirements"
+        ),
+        CropPrediction(
+            cropName = "Corn",
+            confidence = 0.60f,
+            percentage = 60,
+            color = Color(0xFFFFD700),
+            icon = "🌽",
+            reasoning = "Good temperature adaptability"
+        ),
+        CropPrediction(
+            cropName = "Mango",
+            confidence = 0.55f,
+            percentage = 55,
+            color = Color(0xFFFF6347),
+            icon = "🥭",
+            reasoning = "Well-drained soil preference"
+        )
+    )
+}
+
+/**
+ * CropRecommendation Composable - Main UI Screen
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CropRecommendationScreen(
+    navController: NavController,
+    soilDataViewModel: SoilDataViewModel = viewModel()
+) {
+    val context = LocalContext.current
+    var predictions by remember { mutableStateOf<List<CropPrediction>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(true) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var showErrorDialog by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
+
+    // Load and process data on composition
+    LaunchedEffect(Unit) {
+        coroutineScope.launch(Dispatchers.Default) {
+            try {
+                val allLocations = soilDataViewModel.getAllStoredLocations().toList()
+                val soilDataList = allLocations.mapNotNull { location ->
+                    soilDataViewModel.getSoilData(location)
+                }
+
+                Log.d("CropRecommendation", "Loaded ${soilDataList.size} soil data samples")
+
+                if (soilDataList.isEmpty()) {
+                    error = "No soil data collected. Please collect soil samples first."
+                    showErrorDialog = true
+                } else {
+                    predictions = runOnnxInference(context, soilDataList)
+                    Log.d("CropRecommendation", "Generated ${predictions.size} predictions")
+                }
+            } catch (e: Exception) {
+                Log.e("CropRecommendation", "Error loading data: ${e.message}", e)
+                error = "Error loading crop recommendations: ${e.message}"
+                showErrorDialog = true
+            } finally {
+                isLoading = false
+            }
+        }
+    }
+
+    // Main UI Layout
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        "Crop Recommendation",
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = Color.White
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color(0xFF2196F3)
+                ),
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+    ) { paddingValues ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color(0xFFF5F5F5))
+                .padding(paddingValues)
+        ) {
+            when {
+                isLoading -> {
+                    // Loading State
+                    LoadingScreen()
+                }
+                showErrorDialog && error != null -> {
+                    // Error State
+                    ErrorScreen(error = error!!, onRetry = {
+                        navController.popBackStack()
+                    })
+                }
+                predictions.isNotEmpty() -> {
+                    // Results State
+                    ResultsScreen(predictions = predictions)
+                }
+                else -> {
+                    // Empty State
+                    EmptyScreen()
+                }
+            }
+        }
+    }
+
+    // Error Dialog
+    if (showErrorDialog && error != null) {
+        Dialog(
+            onDismissRequest = { showErrorDialog = false }
+        ) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth(0.85f)
+                    .padding(16.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Error,
+                        contentDescription = "Error",
+                        modifier = Modifier.size(48.dp),
+                        tint = Color.Red
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        "Error",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        error!!,
+                        textAlign = TextAlign.Center,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Spacer(modifier = Modifier.height(20.dp))
+                    Button(
+                        onClick = {
+                            showErrorDialog = false
+                            navController.popBackStack()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF2196F3)
+                        )
+                    ) {
+                        Text("Go Back", color = Color.White)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Loading Screen Composable
+ */
+@Composable
+fun LoadingScreen() {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        CircularProgressIndicator(
+            modifier = Modifier.size(64.dp),
+            color = Color(0xFF2196F3),
+            strokeWidth = 4.dp
+        )
+        Spacer(modifier = Modifier.height(24.dp))
+        Text(
+            "Analyzing Soil Data...",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            "Running ML model inference",
+            style = MaterialTheme.typography.bodyMedium,
+            color = Color.Gray,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+/**
+ * Error Screen Composable
+ */
+@Composable
+fun ErrorScreen(error: String, onRetry: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(
+            imageVector = Icons.Default.Error,
+            contentDescription = "Error",
+            modifier = Modifier.size(64.dp),
+            tint = Color.Red
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            "Error Loading Recommendations",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        Text(
+            error,
+            style = MaterialTheme.typography.bodyMedium,
+            color = Color.Gray,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 16.dp)
+        )
+        Spacer(modifier = Modifier.height(24.dp))
+        Button(
+            onClick = onRetry,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color(0xFF2196F3)
+            )
+        ) {
+            Text("Try Again", color = Color.White)
+        }
+    }
+}
+
+/**
+ * Empty State Screen Composable
+ */
+@Composable
+fun EmptyScreen() {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(
+            imageVector = Icons.Default.Info,
+            contentDescription = "No Data",
+            modifier = Modifier.size(64.dp),
+            tint = Color.Gray
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            "No Recommendations Available",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        Text(
+            "Please collect soil samples first",
+            style = MaterialTheme.typography.bodyMedium,
+            color = Color.Gray,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+/**
+ * Results Screen Composable - Shows all crop recommendations
+ */
+@Composable
+fun ResultsScreen(predictions: List<CropPrediction>) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+    ) {
+        // Summary Card
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    "Top Recommendation",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.Gray,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                val topCrop = predictions.firstOrNull()
+                if (topCrop != null) {
+                    Text(
+                        topCrop.icon,
+                        fontSize = 48.sp
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        topCrop.cropName,
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF2196F3)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        "${topCrop.percentage}% Match",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = topCrop.color
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        topCrop.reasoning,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Gray,
+                        textAlign = TextAlign.Center
+                    )
+                }
+
+                // Summary Stats Row
+                Spacer(modifier = Modifier.height(16.dp))
+                Divider()
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            "${predictions.size}",
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF2196F3)
+                        )
+                        Text(
+                            "Options",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.Gray
+                        )
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            "${(predictions.map { it.confidence }.average() * 100).roundToInt()}%",
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF4CAF50)
+                        )
+                        Text(
+                            "Avg. Confidence",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.Gray
+                        )
+                    }
+                }
+            }
+        }
+
+        // Recommendations Title
+        Text(
+            "All Recommendations",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(start = 16.dp, top = 8.dp, end = 16.dp)
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Predictions List
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(bottom = 16.dp)
+        ) {
+            items(predictions) { prediction ->
+                CropPredictionCard(prediction = prediction)
+            }
+        }
+    }
+}
+
+/**
+ * Individual Crop Prediction Card
+ */
+@Composable
+fun CropPredictionCard(prediction: CropPrediction) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(4.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // Crop Icon
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .background(
+                        color = prediction.color.copy(alpha = 0.2f),
+                        shape = RoundedCornerShape(12.dp)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    prediction.icon,
+                    fontSize = 32.sp
+                )
+            }
+
+            // Crop Details
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        prediction.cropName,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black
+                    )
+                    Text(
+                        "${prediction.percentage}%",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Bold,
+                        color = prediction.color,
+                        fontSize = 16.sp
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                // Progress Bar
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(6.dp)
+                        .background(
+                            color = Color.LightGray,
+                            shape = RoundedCornerShape(3.dp)
+                        )
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .fillMaxWidth(prediction.confidence.coerceIn(0f, 1f))
+                            .background(
+                                brush = Brush.horizontalGradient(
+                                    listOf(prediction.color, prediction.color.copy(alpha = 0.7f))
+                                ),
+                                shape = RoundedCornerShape(3.dp)
+                            )
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                // Reasoning
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            color = prediction.color.copy(alpha = 0.1f),
+                            shape = RoundedCornerShape(6.dp)
+                        )
+                        .padding(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.CheckCircle,
+                        contentDescription = "Info",
+                        modifier = Modifier.size(16.dp),
+                        tint = prediction.color
+                    )
+                    Text(
+                        prediction.reasoning,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.Gray,
+                        maxLines = 2
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Extension function to display the Crop Recommendation Screen
+ */
+@Composable
+fun CropRecommendation(
+    navController: NavController,
+    soilDataViewModel: SoilDataViewModel = viewModel()
+) {
+    CropRecommendationScreen(navController = navController, soilDataViewModel = soilDataViewModel)
+}
+

@@ -72,7 +72,7 @@ fun GetSoilData(
     length: String?,
     width: String?,
     crop: String?,
-    soilDataViewModel: SoilDataViewModel = viewModel()
+    soilDataViewModel: SoilDataViewModel
 ) {
     val dumaguete = LatLng(9.3093, 123.308)
     val cameraPositionState = rememberCameraPositionState {
@@ -102,6 +102,12 @@ fun GetSoilData(
     var currentSoilData by remember { mutableStateOf<SoilData?>(null) }
     var storedLocations by remember { mutableStateOf(setOf<LatLng>()) }
     var showSaveSuccessMessage by remember { mutableStateOf(false) }
+
+    // Save session state
+    var showSaveSessionDialog by remember { mutableStateOf(false) }
+    var sessionName by remember { mutableStateOf("") }
+    var isSavingSession by remember { mutableStateOf(false) }
+    var sessionSaveSuccess by remember { mutableStateOf(false) }
 
     // Calculate dots based on area with fixed minimum spacing
     val area = landArea?.toDoubleOrNull() ?: 0.0
@@ -526,6 +532,151 @@ fun GetSoilData(
         }
     }
 
+    // Save Session Dialog
+    if (showSaveSessionDialog) {
+        Dialog(
+            onDismissRequest = {
+                if (!isSavingSession) {
+                    showSaveSessionDialog = false
+                    sessionName = ""
+                }
+            }
+        ) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth(0.95f)
+                    .padding(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = Color.White
+                )
+            ) {
+                Column(
+                    modifier = Modifier
+                        .padding(24.dp)
+                        .fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "Save Session",
+                        style = MaterialTheme.typography.titleLarge
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Session info display
+                    Text(
+                        text = "Session Summary",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color.LightGray.copy(alpha = 0.2f), shape = RoundedCornerShape(8.dp))
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        DataRow("Crop", crop ?: "N/A")
+                        DataRow("Land Area", "$landArea m²")
+                        DataRow("Field Size", "${length}m × ${width}m")
+                        DataRow("Total Dots", "${soilDataViewModel.totalDotsCount}")
+                        DataRow("Data Collected", "${soilDataViewModel.getStoredDataCount()} / ${soilDataViewModel.totalDotsCount}")
+                        DataRow("Completion", "${soilDataViewModel.getCompletionPercentage()}%")
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Session name input
+                    OutlinedTextField(
+                        value = sessionName,
+                        onValueChange = { sessionName = it },
+                        label = { Text("Session Name") },
+                        placeholder = { Text("e.g., Field A - January 2026") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
+                        enabled = !isSavingSession,
+                        singleLine = true
+                    )
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    Button(
+                        onClick = {
+                            if (sessionName.isNotBlank()) {
+                                isSavingSession = true
+                                coroutineScope.launch {
+                                    try {
+                                        val mapTypeStr = if (mapType == MapType.SATELLITE) "SATELLITE" else "NORMAL"
+                                        soilDataViewModel.saveCurrentSession(
+                                            sessionName = sessionName,
+                                            landArea = landArea?.toDoubleOrNull() ?: 0.0,
+                                            length = length?.toDoubleOrNull() ?: 0.0,
+                                            width = width?.toDoubleOrNull() ?: 0.0,
+                                            crop = crop ?: "Unknown",
+                                            polygonCenter = polygonCenter,
+                                            rotation = rotation,
+                                            mapType = mapTypeStr,
+                                            cameraZoom = cameraPositionState.position.zoom
+                                        )
+                                        Log.d("SaveSession", "✓ Session saved: $sessionName")
+                                        sessionSaveSuccess = true
+                                        kotlinx.coroutines.delay(1500)
+                                        showSaveSessionDialog = false
+                                        sessionName = ""
+                                        sessionSaveSuccess = false
+                                    } catch (e: Exception) {
+                                        Log.e("SaveSession", "Error saving session: ${e.message}")
+                                    } finally {
+                                        isSavingSession = false
+                                    }
+                                }
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                        enabled = sessionName.isNotBlank() && !isSavingSession,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF4CAF50)
+                        )
+                    ) {
+                        if (isSavingSession) {
+                            CircularProgressIndicator(
+                                modifier = Modifier
+                                    .size(20.dp)
+                                    .padding(end = 8.dp),
+                                strokeWidth = 2.dp,
+                                color = Color.White
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Save,
+                                contentDescription = "Save",
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(if (isSavingSession) "Saving..." else "Save Session")
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    TextButton(
+                        onClick = {
+                            showSaveSessionDialog = false
+                            sessionName = ""
+                        },
+                        enabled = !isSavingSession,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Cancel")
+                    }
+                }
+            }
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -664,6 +815,7 @@ fun GetSoilData(
             actions = {}
         )
 
+        // My Location button
         FloatingActionButton(
             onClick = {
                 if (ActivityCompat.checkSelfPermission(
@@ -696,10 +848,28 @@ fun GetSoilData(
                     }
                 }
             },
-            modifier = Modifier.padding(16.dp).align(Alignment.TopEnd),
+            modifier = Modifier.padding(25.dp).align(Alignment.TopEnd),
             containerColor = Color.White
         ) {
             Icon(Icons.Default.MyLocation, contentDescription = "Current Location")
+        }
+
+        // Save Data button (top right, below My Location)
+        FloatingActionButton(
+            onClick = {
+                Log.d("GetSoilData", "Save Data clicked")
+                showSaveSessionDialog = true
+            },
+            modifier = Modifier
+                .padding(top = 95.dp, end = 25.dp)
+                .align(Alignment.TopEnd),
+            containerColor = Color(0xFFFF9800)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Save,
+                contentDescription = "Save Data",
+                tint = Color.White
+            )
         }
 
         Column(
@@ -761,13 +931,14 @@ fun GetSoilData(
         Button(
             onClick = {
                 Log.d("GetSoilData", "Get Crop Recommendation clicked - All ${soilDataViewModel.totalDotsCount} dots have data")
+                navController.navigate("mapping_info")
             },
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 32.dp)
-                .fillMaxWidth(0.85f)
+                .fillMaxWidth(0.60f)
                 .height(48.dp),
-            shape = RoundedCornerShape(12.dp),
+            shape = RoundedCornerShape(50.dp),
             enabled = isButtonEnabled,
             colors = ButtonDefaults.buttonColors(
                 containerColor = Color(0xFF2196F3),
@@ -783,7 +954,7 @@ fun GetSoilData(
             Spacer(modifier = Modifier.width(8.dp))
             Text(
                 text = "Get Crop Recommendation",
-                fontSize = 14.sp,
+                fontSize = 11.sp,
                 color = Color.White
             )
         }
@@ -815,4 +986,3 @@ private fun DataRow(label: String, value: String) {
         )
     }
 }
-
