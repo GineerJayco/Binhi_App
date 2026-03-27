@@ -38,6 +38,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.delay
 import com.example.binhi.ui.theme.BinhiTheme
 import com.example.binhi.viewmodel.SoilDataViewModel
+import com.example.binhi.data.database.SoilDataDatabase
+import com.example.binhi.data.database.SessionRepository
 
 class MainUI : ComponentActivity() {
     @UnstableApi
@@ -47,8 +49,14 @@ class MainUI : ComponentActivity() {
         setContent {
             BinhiTheme {
                 val navController = rememberNavController()
-                // Create ViewModel at NavHost level so it's shared across all screens
-                val soilDataViewModel: SoilDataViewModel = viewModel()
+                // Initialize database and repository
+                val database = SoilDataDatabase.getInstance(this@MainUI)
+                val sessionRepository = SessionRepository(
+                    database.sessionDao(),
+                    database.soilDataPointDao()
+                )
+                // Create ViewModel with repository at NavHost level so it's shared across all screens
+                val soilDataViewModel = SoilDataViewModel(sessionRepository)
 
                 NavHost(
                     navController = navController,

@@ -1,6 +1,8 @@
 package com.example.binhi.viewmodel
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -8,12 +10,17 @@ import androidx.compose.runtime.setValue
 import com.google.android.gms.maps.model.LatLng
 import com.example.binhi.data.SoilData
 import com.example.binhi.data.SavedSession
+import com.example.binhi.data.database.SessionRepository
+import kotlinx.coroutines.launch
 
 /**
- * ViewModel to manage soil data storage per map location
+ * ViewModel to manage soil data storage per map location with database persistence
  * Uses observable state to ensure Compose reacts to changes
+ * Integrates with Room database for persistent storage
  */
-class SoilDataViewModel : ViewModel() {
+class SoilDataViewModel(
+    private val sessionRepository: SessionRepository? = null
+) : ViewModel() {
 
     /**
      * Map of LatLng coordinates to their stored SoilData
@@ -28,9 +35,14 @@ class SoilDataViewModel : ViewModel() {
     var totalDotsCount by mutableStateOf(0)
 
     /**
-     * Store all saved sessions
+     * Store all saved sessions (loaded from database)
      */
     var savedSessions by mutableStateOf(listOf<SavedSession>())
+
+    /**
+     * Track if data is loading from database
+     */
+    var isLoadingFromDatabase by mutableStateOf(false)
 
     /**
      * Derived state that checks if all dots have saved soil data
@@ -40,6 +52,36 @@ class SoilDataViewModel : ViewModel() {
      */
     val allDotsComplete by derivedStateOf {
         totalDotsCount > 0 && soilDataStorage.size == totalDotsCount
+    }
+
+    /**
+     * Initialize ViewModel by loading sessions from database
+     */
+    init {
+        loadAllSessionsFromDatabase()
+    }
+
+    /**
+     * Load all sessions from the database
+     */
+    fun loadAllSessionsFromDatabase() {
+        if (sessionRepository == null) {
+            Log.w("SoilDataViewModel", "SessionRepository not initialized, using in-memory storage only")
+            return
+        }
+
+        viewModelScope.launch {
+            try {
+                isLoadingFromDatabase = true
+                val sessions = sessionRepository.getAllSessions()
+                savedSessions = sessions
+                Log.d("SoilDataViewModel", "✓ Loaded ${sessions.size} sessions from database")
+                isLoadingFromDatabase = false
+            } catch (e: Exception) {
+                Log.e("SoilDataViewModel", "Error loading sessions from database: ${e.message}", e)
+                isLoadingFromDatabase = false
+            }
+        }
     }
 
     /**
@@ -124,6 +166,7 @@ class SoilDataViewModel : ViewModel() {
 
     /**
      * Save current session with all map data and soil data
+     * Also persists to database for permanent storage
      * @param sessionName Name for the saved session
      * @param landArea Land area in square meters
      * @param length Field length in meters
@@ -164,8 +207,24 @@ class SoilDataViewModel : ViewModel() {
             soilDataPoints = soilDataMap
         )
 
-        // Add to saved sessions list
+        // Add to saved sessions list in memory
         savedSessions = savedSessions + session
+
+        // Persist to database
+        if (sessionRepository != null) {
+            viewModelScope.launch {
+                try {
+                    val success = sessionRepository.saveSession(session)
+                    if (success) {
+                        Log.d("SoilDataViewModel", "✓ Session persisted to database: $sessionName")
+                    } else {
+                        Log.e("SoilDataViewModel", "Failed to persist session to database")
+                    }
+                } catch (e: Exception) {
+                    Log.e("SoilDataViewModel", "Error persisting session to database: ${e.message}", e)
+                }
+            }
+        }
 
         return session
     }
@@ -192,10 +251,26 @@ class SoilDataViewModel : ViewModel() {
     }
 
     /**
-     * Delete a saved session
+     * Delete a saved session from memory and database
      */
     fun deleteSavedSession(sessionId: String) {
         savedSessions = savedSessions.filter { it.id != sessionId }
+
+        // Delete from database
+        if (sessionRepository != null) {
+            viewModelScope.launch {
+                try {
+                    val success = sessionRepository.deleteSession(sessionId)
+                    if (success) {
+                        Log.d("SoilDataViewModel", "✓ Session deleted from database: $sessionId")
+                    } else {
+                        Log.e("SoilDataViewModel", "Failed to delete session from database")
+                    }
+                } catch (e: Exception) {
+                    Log.e("SoilDataViewModel", "Error deleting session from database: ${e.message}", e)
+                }
+            }
+        }
     }
 
     /**

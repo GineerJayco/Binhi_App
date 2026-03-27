@@ -5,6 +5,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    kotlin("kapt")
 }
 
 // Read the local.properties file
@@ -77,6 +78,15 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer:1.3.1")
     implementation("androidx.media3:media3-ui:1.3.1")
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.17.0")
+
+    // Room Database dependencies
+    implementation("androidx.room:room-runtime:2.7.0")
+    implementation("androidx.room:room-ktx:2.7.0")
+    kapt("androidx.room:room-compiler:2.7.0")
+
+    // Kotlin metadata for compatibility with Kotlin 2.x
+    kapt("org.jetbrains.kotlinx:kotlinx-metadata-jvm:0.8.0")
+
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
