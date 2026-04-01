@@ -29,10 +29,10 @@ fun InputCropQuantityScreen(navController: NavController) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Input Crop Quantity") },
+                title = { Text("Input Crop Quantity", color = Color.Black) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.Black)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -71,10 +71,11 @@ fun InputCropQuantityScreen(navController: NavController) {
                             readOnly = true,
                             value = selectedCrop,
                             onValueChange = {},
-                            label = { Text("Crop") },
-                            placeholder = { Text("Choose a crop...") },
+                            label = { Text("Crop", color = Color.Black) },
+                            placeholder = { Text("Choose a crop...", color = Color.Black) },
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
                             colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+                            textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black)
                         )
                         ExposedDropdownMenu(
                             expanded = expanded,
@@ -95,11 +96,12 @@ fun InputCropQuantityScreen(navController: NavController) {
                     OutlinedTextField(
                         value = cropQuantity,
                         onValueChange = { cropQuantity = it },
-                        label = { Text("Crop Quantity") },
-                        placeholder = { Text("e.g., 50") },
+                        label = { Text("Crop Quantity", color = Color.Black) },
+                        placeholder = { Text("e.g., 50", color = Color.Black) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
+                        singleLine = true,
+                        textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black)
                     )
                 }
             }

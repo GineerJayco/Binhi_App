@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.MutableState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -275,7 +276,8 @@ fun getDefaultRecommendations(): List<CropPrediction> {
 @Composable
 fun CropRecommendationScreen(
     navController: NavController,
-    soilDataViewModel: SoilDataViewModel = viewModel()
+    soilDataViewModel: SoilDataViewModel = viewModel(),
+    isDarkModeState: MutableState<Boolean> = mutableStateOf(false)
 ) {
     val context = LocalContext.current
     var predictions by remember { mutableStateOf<List<CropPrediction>>(emptyList()) }
@@ -790,8 +792,9 @@ fun CropPredictionCard(prediction: CropPrediction) {
 @Composable
 fun CropRecommendation(
     navController: NavController,
-    soilDataViewModel: SoilDataViewModel = viewModel()
+    soilDataViewModel: SoilDataViewModel = viewModel(),
+    isDarkModeState: MutableState<Boolean> = mutableStateOf(false)
 ) {
-    CropRecommendationScreen(navController = navController, soilDataViewModel = soilDataViewModel)
+    CropRecommendationScreen(navController = navController, soilDataViewModel = soilDataViewModel, isDarkModeState = isDarkModeState)
 }
 

@@ -37,10 +37,10 @@ fun InputLandAreaScreen(navController: NavController) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Input Land Area") },
+                title = { Text("Input Land Area", color = Color.Black) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.Black)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -68,18 +68,19 @@ fun InputLandAreaScreen(navController: NavController) {
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text("Define Your Plot", style = MaterialTheme.typography.titleLarge)
+                    Text("Define Your Plot", style = MaterialTheme.typography.titleLarge, color = Color.Black)
                     Spacer(modifier = Modifier.height(8.dp))
 
                     OutlinedTextField(
                         value = landArea,
                         onValueChange = { if (!isAreaSet) landArea = it },
-                        label = { Text("Land Area") },
-                        trailingIcon = { Text("sqm", style = MaterialTheme.typography.bodySmall) },
+                        label = { Text("Land Area", color = Color.Black) },
+                        trailingIcon = { Text("sqm", style = MaterialTheme.typography.bodySmall, color = Color.Black) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.fillMaxWidth(),
                         readOnly = isAreaSet,
-                        singleLine = true
+                        singleLine = true,
+                        textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black)
                     )
 
                     if (isAreaSet) {
@@ -103,9 +104,10 @@ fun InputLandAreaScreen(navController: NavController) {
                                     width = decimalFormat.format(area / l)
                                 }
                             },
-                            label = { Text("Length") },
+                            label = { Text("Length", color = Color.Black) },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             modifier = Modifier.fillMaxWidth(),
+                            textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black),
                             trailingIcon = {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                     IconButton(onClick = {
@@ -148,9 +150,10 @@ fun InputLandAreaScreen(navController: NavController) {
                                     length = decimalFormat.format(area / w)
                                 }
                             },
-                            label = { Text("Width") },
+                            label = { Text("Width", color = Color.Black) },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             modifier = Modifier.fillMaxWidth(),
+                            textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black),
                             trailingIcon = {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                     IconButton(onClick = {
@@ -196,7 +199,7 @@ fun InputLandAreaScreen(navController: NavController) {
                             modifier = Modifier.fillMaxWidth().height(56.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
                         ) {
-                            Text("Set Area")
+                            Text("Set Area", color = Color.Black)
                         }
                         Spacer(modifier = Modifier.height(16.dp))
 
@@ -219,7 +222,7 @@ fun InputLandAreaScreen(navController: NavController) {
                     modifier = Modifier.fillMaxWidth().height(56.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
                 ) {
-                    Text("Get Soil Data")
+                    Text("Get Soil Data", color = Color.Black)
                 }
                 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -244,14 +247,14 @@ fun InputLandAreaScreen(navController: NavController) {
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Divider(modifier = Modifier.weight(1f))
-                    Text("OR", modifier = Modifier.padding(horizontal = 8.dp))
+                    Text("OR", modifier = Modifier.padding(horizontal = 8.dp), color = Color.Black)
                     Divider(modifier = Modifier.weight(1f))
                 }
                 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                Text("Select Crop", style = MaterialTheme.typography.titleMedium)
-                
+                Text("Select Crop", style = MaterialTheme.typography.titleMedium, color = Color.Black)
+
                 Spacer(modifier = Modifier.height(8.dp))
 
                 ExposedDropdownMenuBox(
@@ -265,8 +268,10 @@ fun InputLandAreaScreen(navController: NavController) {
                         value = selectedCrop,
                         onValueChange = {},
                         placeholder = { Text("Choose a crop...") },
+                        label = { Text("Crop", color = Color.Black) },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
                         colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+                        textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black)
                     )
                     ExposedDropdownMenu(
                         expanded = expanded,

@@ -15,11 +15,14 @@ import androidx.compose.material.icons.filled.Agriculture
 import androidx.compose.material.icons.filled.Yard
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material.icons.filled.Brightness4
+import androidx.compose.material.icons.filled.Brightness7
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.MutableState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -37,6 +40,7 @@ import androidx.navigation.navArgument
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.delay
 import com.example.binhi.ui.theme.BinhiTheme
+import com.example.binhi.ui.theme.ThemeManager
 import com.example.binhi.viewmodel.SoilDataViewModel
 import com.example.binhi.data.database.SoilDataDatabase
 import com.example.binhi.data.database.SessionRepository
@@ -47,7 +51,9 @@ class MainUI : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            BinhiTheme {
+            val isDarkMode = remember { mutableStateOf(ThemeManager.getCurrentTheme()) }
+
+            BinhiTheme(darkTheme = isDarkMode.value) {
                 val navController = rememberNavController()
                 // Initialize database and repository
                 val database = SoilDataDatabase.getInstance(this@MainUI)
@@ -56,93 +62,102 @@ class MainUI : ComponentActivity() {
                     database.soilDataPointDao()
                 )
                 // Create ViewModel with repository at NavHost level so it's shared across all screens
-                val soilDataViewModel = SoilDataViewModel(sessionRepository)
+                val soilDataViewModel: SoilDataViewModel = viewModel(
+                    factory = object : androidx.lifecycle.ViewModelProvider.Factory {
+                        override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
+                            return SoilDataViewModel(sessionRepository) as T
+                        }
+                    }
+                )
 
                 NavHost(
                     navController = navController,
                     startDestination = "main",
                     modifier = Modifier.fillMaxSize()
                 ) {
-                        @Suppress("EXPERIMENTAL_API_USAGE")
-                        composable("main") {
-                            BinhiScreen(navController = navController)
-                        }
-                        composable("input_land_area") {
-                            InputLandAreaScreen(navController = navController)
-                        }
-                        composable("input_crop_quantity") {
-                            InputCropQuantityScreen(navController = navController)
-                        }
-                        composable(
-                            route = "visualize_la/{landArea}/{length}/{width}/{crop}",
-                            arguments = listOf(
-                                navArgument("landArea") { type = NavType.StringType },
-                                navArgument("length") { type = NavType.StringType },
-                                navArgument("width") { type = NavType.StringType },
-                                navArgument("crop") { type = NavType.StringType }
-                            )
-                        ) { backStackEntry ->
-                            VisualizeLA(
-                                navController = navController,
-                                landArea = backStackEntry.arguments?.getString("landArea"),
-                                length = backStackEntry.arguments?.getString("length"),
-                                width = backStackEntry.arguments?.getString("width"),
-                                crop = backStackEntry.arguments?.getString("crop")
-                            )
-                        }
-                        composable(
-                            route = "visualize_cq/{crop}/{cropQuantity}",
-                            arguments = listOf(
-                                navArgument("crop") { type = NavType.StringType },
-                                navArgument("cropQuantity") { type = NavType.StringType }
-                            )
-                        ) { backStackEntry ->
-                            VisualizeCQ(
-                                navController = navController,
-                                crop = backStackEntry.arguments?.getString("crop"),
-                                cropQuantity = backStackEntry.arguments?.getString("cropQuantity")
-                            )
-                        }
-                        composable(
-                            route = "get_soil_data/{landArea}/{length}/{width}/{crop}",
-                            arguments = listOf(
-                                navArgument("landArea") { type = NavType.StringType },
-                                navArgument("length") { type = NavType.StringType },
-                                navArgument("width") { type = NavType.StringType },
-                                navArgument("crop") { type = NavType.StringType }
-                            )
-                        ) { backStackEntry ->
-                            GetSoilData(
-                                navController = navController,
-                                landArea = backStackEntry.arguments?.getString("landArea"),
-                                length = backStackEntry.arguments?.getString("length"),
-                                width = backStackEntry.arguments?.getString("width"),
-                                crop = backStackEntry.arguments?.getString("crop"),
-                                soilDataViewModel = soilDataViewModel
-                            )
-                        }
-                        composable("mapping_info") {
-                            MappingInfo(navController = navController, soilDataViewModel = soilDataViewModel)
-                        }
-                        composable("crop_recommendation") {
-                            CropRecommendation(navController = navController, soilDataViewModel = soilDataViewModel)
-                        }
-                        composable("saved_data") {
-                            SavedDataScreen(navController = navController, soilDataViewModel = soilDataViewModel)
-                        }
-                        composable("about") {
-                            AboutScreen(navController = navController)
-                        }
+                    @Suppress("EXPERIMENTAL_API_USAGE")
+                    composable("main") {
+                        BinhiScreen(navController = navController, isDarkModeState = isDarkMode)
+                    }
+                    composable("input_land_area") {
+                        InputLandAreaScreen(navController = navController)
+                    }
+                    composable("input_crop_quantity") {
+                        InputCropQuantityScreen(navController = navController)
+                    }
+                    composable(
+                        route = "visualize_la/{landArea}/{length}/{width}/{crop}",
+                        arguments = listOf(
+                            navArgument("landArea") { type = NavType.StringType },
+                            navArgument("length") { type = NavType.StringType },
+                            navArgument("width") { type = NavType.StringType },
+                            navArgument("crop") { type = NavType.StringType }
+                        )
+                    ) { backStackEntry ->
+                        VisualizeLA(
+                            navController = navController,
+                            landArea = backStackEntry.arguments?.getString("landArea"),
+                            length = backStackEntry.arguments?.getString("length"),
+                            width = backStackEntry.arguments?.getString("width"),
+                            crop = backStackEntry.arguments?.getString("crop"),
+                            isDarkModeState = isDarkMode
+                        )
+                    }
+                    composable(
+                        route = "visualize_cq/{crop}/{cropQuantity}",
+                        arguments = listOf(
+                            navArgument("crop") { type = NavType.StringType },
+                            navArgument("cropQuantity") { type = NavType.StringType }
+                        )
+                    ) { backStackEntry ->
+                        VisualizeCQ(
+                            navController = navController,
+                            crop = backStackEntry.arguments?.getString("crop"),
+                            cropQuantity = backStackEntry.arguments?.getString("cropQuantity"),
+                            isDarkModeState = isDarkMode
+                        )
+                    }
+                    composable(
+                        route = "get_soil_data/{landArea}/{length}/{width}/{crop}",
+                        arguments = listOf(
+                            navArgument("landArea") { type = NavType.StringType },
+                            navArgument("length") { type = NavType.StringType },
+                            navArgument("width") { type = NavType.StringType },
+                            navArgument("crop") { type = NavType.StringType }
+                        )
+                    ) { backStackEntry ->
+                        GetSoilData(
+                            navController = navController,
+                            landArea = backStackEntry.arguments?.getString("landArea"),
+                            length = backStackEntry.arguments?.getString("length"),
+                            width = backStackEntry.arguments?.getString("width"),
+                            crop = backStackEntry.arguments?.getString("crop"),
+                            soilDataViewModel = soilDataViewModel,
+                            isDarkModeState = isDarkMode
+                        )
+                    }
+                    composable("mapping_info") {
+                        MappingInfo(navController = navController, soilDataViewModel = soilDataViewModel, isDarkModeState = isDarkMode)
+                    }
+                    composable("crop_recommendation") {
+                        CropRecommendation(navController = navController, soilDataViewModel = soilDataViewModel, isDarkModeState = isDarkMode)
+                    }
+                    composable("saved_data") {
+                        SavedDataScreen(navController = navController, soilDataViewModel = soilDataViewModel, isDarkModeState = isDarkMode)
+                    }
+                    composable("about") {
+                        AboutScreen(navController = navController, isDarkModeState = isDarkMode)
                     }
                 }
             }
         }
     }
+}
 
 
 @UnstableApi
 @Composable
-fun BinhiScreen(navController: NavController, modifier: Modifier = Modifier) {
+fun BinhiScreen(navController: NavController, isDarkModeState: MutableState<Boolean> = mutableStateOf(false), modifier: Modifier = Modifier) {
     // ===== ADJUSTABLE UI POSITIONING CONSTANTS =====
     // Adjust these values to customize button and widget positions
     val topSpacerHeight = 100.dp              // Space above Weather Widget
@@ -171,30 +186,46 @@ fun BinhiScreen(navController: NavController, modifier: Modifier = Modifier) {
     Box(modifier = modifier.fillMaxSize()) {
         VideoBackground(modifier = Modifier.fillMaxSize())
 
-        // Navigation bar with hamburger menu at far right
-        Box(
+        // Navigation bar with theme toggle and hamburger menu at far right
+        Row(
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .padding(top = 50.dp, end = 5.dp)
+                .padding(top = 50.dp, end = 5.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            IconButton(onClick = { menuExpanded.value = !menuExpanded.value }) {
+            // Theme Toggle Button
+            IconButton(onClick = {
+                isDarkModeState.value = !isDarkModeState.value
+                ThemeManager.toggleTheme()
+            }) {
                 Icon(
-                    imageVector = Icons.Default.MoreVert,
-                    contentDescription = "Menu",
+                    imageVector = if (isDarkModeState.value) Icons.Default.Brightness7 else Icons.Default.Brightness4,
+                    contentDescription = if (isDarkModeState.value) "Switch to Light Mode" else "Switch to Dark Mode",
                     tint = Color.Black
                 )
             }
-            DropdownMenu(
-                expanded = menuExpanded.value,
-                onDismissRequest = { menuExpanded.value = false }
-            ) {
-                DropdownMenuItem(
-                    text = { Text("About") },
-                    onClick = {
-                        menuExpanded.value = false
-                        navController.navigate("about")
-                    }
-                )
+
+            // Menu Button
+            Box {
+                IconButton(onClick = { menuExpanded.value = !menuExpanded.value }) {
+                    Icon(
+                        imageVector = Icons.Default.MoreVert,
+                        contentDescription = "Menu",
+                        tint = Color.Black
+                    )
+                }
+                DropdownMenu(
+                    expanded = menuExpanded.value,
+                    onDismissRequest = { menuExpanded.value = false }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("About") },
+                        onClick = {
+                            menuExpanded.value = false
+                            navController.navigate("about")
+                        }
+                    )
+                }
             }
         }
 
@@ -308,7 +339,6 @@ fun BinhiScreen(navController: NavController, modifier: Modifier = Modifier) {
 @Composable
 fun BinhiScreenPreview() {
     BinhiTheme {
-        val navController = rememberNavController()
-        BinhiScreen(navController = navController)
+        BinhiScreen(navController = rememberNavController())
     }
 }

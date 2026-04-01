@@ -18,6 +18,7 @@ import androidx.compose.material.icons.automirrored.filled.RotateRight
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.MutableState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -72,7 +73,8 @@ fun GetSoilData(
     length: String?,
     width: String?,
     crop: String?,
-    soilDataViewModel: SoilDataViewModel
+    soilDataViewModel: SoilDataViewModel,
+    isDarkModeState: MutableState<Boolean> = mutableStateOf(false)
 ) {
     val dumaguete = LatLng(9.3093, 123.308)
     val cameraPositionState = rememberCameraPositionState {

@@ -12,6 +12,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.MutableState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -60,7 +61,8 @@ private fun formatTimestamp(timestamp: Long): String {
 @Composable
 fun MappingInfo(
     navController: NavController,
-    soilDataViewModel: SoilDataViewModel
+    soilDataViewModel: SoilDataViewModel,
+    isDarkModeState: MutableState<Boolean> = mutableStateOf(false)
 ) {
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
     var locationToDelete by remember { mutableStateOf<LatLng?>(null) }
