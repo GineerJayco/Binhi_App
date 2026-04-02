@@ -8,8 +8,11 @@ import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.filled.*
@@ -102,6 +105,42 @@ private fun calculateCropPositions(
     return positions
 }
 
+private fun transformCropPositions(
+    baselineCropPositions: List<LatLng>,
+    oldCenter: LatLng,
+    oldRotation: Float,
+    newCenter: LatLng,
+    newRotation: Float
+): List<LatLng> {
+    if (baselineCropPositions.isEmpty()) return emptyList()
+
+    val rotationDelta = newRotation - oldRotation
+    val angleRad = Math.toRadians(rotationDelta.toDouble())
+
+    return baselineCropPositions.map { position ->
+        // Convert lat/lng to meters relative to old center
+        val oldCenterLatRad = Math.toRadians(oldCenter.latitude)
+        val posLatRad = Math.toRadians(position.latitude)
+        val posLngRad = Math.toRadians(position.longitude)
+        val oldCenterLngRad = Math.toRadians(oldCenter.longitude)
+
+        // Calculate relative position in meters
+        val deltaLat = (position.latitude - oldCenter.latitude) * 111132.0
+        val deltaLng = (position.longitude - oldCenter.longitude) * 111320.0 * cos(oldCenterLatRad)
+
+        // Apply rotation transformation
+        val rotatedDeltaX = deltaLng * cos(angleRad) - deltaLat * sin(angleRad)
+        val rotatedDeltaY = deltaLng * sin(angleRad) + deltaLat * cos(angleRad)
+
+        // Convert back to lat/lng relative to new center
+        val newCenterLatRad = Math.toRadians(newCenter.latitude)
+        val newLat = newCenter.latitude + rotatedDeltaY / 111132.0
+        val newLng = newCenter.longitude + rotatedDeltaX / (111320.0 * cos(newCenterLatRad))
+
+        LatLng(newLat, newLng)
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VisualizeCQ(
@@ -168,6 +207,25 @@ fun VisualizeCQ(
     var isPolygonDragging by remember { mutableStateOf(false) }
     var selectedMarkerPosition by remember { mutableStateOf<LatLng?>(null) }
     var showMarkerDialog by remember { mutableStateOf(false) }
+    var showCropListDialog by remember { mutableStateOf(false) }
+    var cropLocationsList by remember { mutableStateOf<List<Pair<Int, LatLng>>>(emptyList()) }
+    var baselineCropPositions by remember { mutableStateOf<List<LatLng>>(emptyList()) }
+    var lastPolygonCenter by remember { mutableStateOf(dumaguete) }
+    var lastRotation by remember { mutableFloatStateOf(0f) }
+    var radarScale by remember { mutableFloatStateOf(1f) }
+    var radarAlpha by remember { mutableFloatStateOf(1f) }
+
+    // Animate radar when crop is selected
+    LaunchedEffect(selectedMarkerPosition) {
+        while (selectedMarkerPosition != null) {
+            for (i in 0..100) {
+                val progress = i / 100f
+                radarScale = 1f + (progress * 2f)
+                radarAlpha = 1f - progress
+                kotlinx.coroutines.delay(20)
+            }
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -207,6 +265,7 @@ fun VisualizeCQ(
         val estimatedLandArea = quantity * areaPerPlant
         val lengthInMeters = sqrt(estimatedLandArea)
         val widthInMeters = sqrt(estimatedLandArea)
+        val estimatedQuantity = cropQuantity?.toDoubleOrNull()?.toInt() ?: 0
 
         val polygonPoints = remember(polygonCenter, rotation, lengthInMeters, widthInMeters) {
             if (lengthInMeters > 0 && widthInMeters > 0) {
@@ -240,6 +299,30 @@ fun VisualizeCQ(
             }
         }
 
+        // Calculate baseline crop positions when polygon points change significantly (not just rotation)
+        LaunchedEffect(lengthInMeters, widthInMeters, crop, estimatedQuantity) {
+            if (polygonPoints.isNotEmpty()) {
+                baselineCropPositions = calculateCropPositions(polygonPoints, crop, estimatedQuantity)
+                lastPolygonCenter = polygonCenter
+                lastRotation = rotation
+            }
+        }
+
+        // Transform crop positions based on rotation and center movement
+        val transformedCropPositions = remember(baselineCropPositions, polygonCenter, rotation, lastPolygonCenter, lastRotation) {
+            if (baselineCropPositions.isNotEmpty()) {
+                transformCropPositions(
+                    baselineCropPositions,
+                    lastPolygonCenter,
+                    lastRotation,
+                    polygonCenter,
+                    rotation
+                )
+            } else {
+                emptyList()
+            }
+        }
+
         GoogleMap(
             modifier = Modifier.fillMaxSize(),
             cameraPositionState = cameraPositionState,
@@ -263,16 +346,14 @@ fun VisualizeCQ(
                         strokeWidth = 5f
                     )
 
-                    // Use the user's input quantity directly for the number of crops to display
-                    val estimatedQuantity = cropQuantity?.toDoubleOrNull()?.toInt() ?: 0
+                    // Update crop locations list for the crop list dialog
+                    LaunchedEffect(transformedCropPositions) {
+                        cropLocationsList = transformedCropPositions.mapIndexed { index, position ->
+                            Pair(index + 1, position)
+                        }
+                    }
 
-                    val cropPositions = calculateCropPositions(
-                        polygonPoints,
-                        crop,
-                        estimatedQuantity
-                    )
-
-                    cropPositions.forEach { position ->
+                    transformedCropPositions.forEachIndexed { index, position ->
                         val markerState = rememberMarkerState(position = position)
                         val icon = crop?.let { cropType ->
                             CropData.crops[cropType]?.let { cropData ->
@@ -295,8 +376,9 @@ fun VisualizeCQ(
 
                         Marker(
                             state = markerState,
-                            title = crop ?: "Crop",
+                            title = "${crop ?: "Crop"} ${index + 1}",
                             icon = icon,
+                            rotation = -cameraPositionState.position.bearing,
                             onClick = {
                                 selectedMarkerPosition = position
                                 showMarkerDialog = true
@@ -305,6 +387,27 @@ fun VisualizeCQ(
                         )
                     }
                 }
+            }
+
+            // Draw small animated radar circles for selected crop
+            if (selectedMarkerPosition != null) {
+                // Small outer pulsing circle
+                Circle(
+                    center = selectedMarkerPosition!!,
+                    radius = 0.5 * radarScale,
+                    fillColor = Color.Blue.copy(alpha = radarAlpha * 0.2f),
+                    strokeColor = Color.Blue.copy(alpha = radarAlpha * 0.5f),
+                    strokeWidth = 1f
+                )
+
+                // Small inner circle
+                Circle(
+                    center = selectedMarkerPosition!!,
+                    radius = 0.2,
+                    fillColor = Color.Blue,
+                    strokeColor = Color.White,
+                    strokeWidth = 0.5f
+                )
             }
         }
 
@@ -364,6 +467,17 @@ fun VisualizeCQ(
             containerColor = Color.White
         ) {
             Icon(Icons.Default.MyLocation, contentDescription = "Current Location")
+        }
+
+        FloatingActionButton(
+            onClick = { showCropListDialog = true },
+            modifier = Modifier
+                .padding(16.dp)
+                .align(Alignment.TopEnd)
+                .padding(top = 72.dp),
+            containerColor = Color.White
+        ) {
+            Icon(Icons.Default.List, contentDescription = "View Crop Locations")
         }
 
         Column(
@@ -455,6 +569,52 @@ fun VisualizeCQ(
                 },
                 confirmButton = {
                     TextButton(onClick = { showMarkerDialog = false }) {
+                        Text("Close")
+                    }
+                }
+            )
+        }
+
+        if (showCropListDialog) {
+            AlertDialog(
+                onDismissRequest = { showCropListDialog = false },
+                title = { Text("Crop Locations") },
+                text = {
+                    LazyColumn {
+                        items(cropLocationsList.size) { index ->
+                            val (cropNumber, location) = cropLocationsList[index]
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(8.dp)
+                                    .background(Color.LightGray, shape = androidx.compose.foundation.shape.RoundedCornerShape(4.dp))
+                                    .padding(8.dp)
+                                    .clickable {
+                                        // Navigate to the crop location with super zoom
+                                        cameraPositionState.position = CameraPosition.fromLatLngZoom(location, 50f)
+                                        selectedMarkerPosition = location
+                                        showCropListDialog = false
+                                    }
+                            ) {
+                                Text(
+                                    text = "$crop $cropNumber",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    modifier = Modifier.padding(bottom = 4.dp)
+                                )
+                                Text(
+                                    text = convertToDMS(location.latitude, true),
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                                Text(
+                                    text = convertToDMS(location.longitude, false),
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showCropListDialog = false }) {
                         Text("Close")
                     }
                 }
