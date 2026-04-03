@@ -7,7 +7,9 @@ import android.graphics.Canvas
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.*
@@ -24,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.app.ActivityCompat
@@ -552,9 +555,17 @@ fun VisualizeLA(
                     mapType = if (checked) MapType.SATELLITE else MapType.NORMAL
                 }
             )
+        }
 
+        Column(
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .padding(end = 8.dp, top = 500.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        )
+        {
             MapScaleBar(
-                modifier = Modifier.padding(top = 8.dp),
+                modifier = Modifier.padding(0.dp),
                 cameraPositionState = cameraPositionState
             )
         }
@@ -609,53 +620,141 @@ fun VisualizeLA(
             // Crop Navigator Panel at the top
             if (showCropNavigator) {
                 val (currentCropNumber, currentLocation) = cropLocationsList[currentCropIndex]
+                val isDarkMode = isDarkModeState.value
+                val backgroundColor = if (isDarkMode) Color(0xFF1E1E1E) else Color.White
+                val surfaceColor = if (isDarkMode) Color(0xFF2D2D2D) else Color(0xFFF5F5F5)
+                val textColor = if (isDarkMode) Color.White else Color.Black
+                val secondaryTextColor = if (isDarkMode) Color(0xFFB0B0B0) else Color(0xFF666666)
+
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
-                        .fillMaxWidth(0.85f)
-                        .background(Color.White, shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
-                        .padding(12.dp)
-                        .padding(top = 8.dp)
+                        .fillMaxWidth(0.90f)
+                        .padding(top = 16.dp)
+                        .background(
+                            color = backgroundColor,
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
+                        )
+                        .border(
+                            width = 1.dp,
+                            color = if (isDarkMode) Color(0xFF404040) else Color(0xFFE0E0E0),
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
+                        )
+                        .padding(16.dp)
                 ) {
                     Column(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         // Header with crop name and count
-                        Text(
-                            text = "$crop ${currentCropNumber} (${currentCropIndex + 1} of ${cropLocationsList.size})",
-                            style = MaterialTheme.typography.labelLarge,
-                            fontSize = 14.sp,
-                            modifier = Modifier
-                                .padding(bottom = 6.dp)
-                                .align(Alignment.CenterHorizontally)
-                        )
-
-                        // Coordinates
-                        Column(
+                        Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(4.dp)
-                                .background(Color(0xFFF0F0F0), shape = androidx.compose.foundation.shape.RoundedCornerShape(4.dp))
-                                .padding(6.dp)
+                                .padding(bottom = 12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "Latitude: ${convertToDMS(currentLocation.latitude, true)}",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontSize = 11.sp
+                                text = "$crop ${currentCropNumber}",
+                                style = MaterialTheme.typography.headlineSmall,
+                                color = textColor,
+                                fontSize = 16.sp,
+                                modifier = Modifier.weight(1f)
                             )
-                            Text(
-                                text = "Longitude: ${convertToDMS(currentLocation.longitude, false)}",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontSize = 11.sp
-                            )
+                            Surface(
+                                color = if (isDarkMode) Color(0xFF404040) else Color(0xFFE8F5E9),
+                                shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
+                                modifier = Modifier.padding(start = 8.dp)
+                            ) {
+                                Text(
+                                    text = "${currentCropIndex + 1}/${cropLocationsList.size}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (isDarkMode) Color(0xFF81C784) else Color(0xFF2E7D32),
+                                    fontSize = 12.sp,
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                )
+                            }
+                        }
+
+                        // Divider
+                        Divider(
+                            color = if (isDarkMode) Color(0xFF404040) else Color(0xFFE0E0E0),
+                            modifier = Modifier.padding(vertical = 12.dp)
+                        )
+
+                        // Coordinates Card
+                        Surface(
+                            color = surfaceColor,
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 12.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(12.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(bottom = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Default.LocationOn,
+                                        contentDescription = "Latitude",
+                                        tint = Color(0xFF1976D2),
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "Latitude",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = secondaryTextColor,
+                                            fontSize = 10.sp
+                                        )
+                                        Text(
+                                            text = convertToDMS(currentLocation.latitude, true),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = textColor,
+                                            fontSize = 12.sp
+                                        )
+                                    }
+                                }
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Default.LocationOn,
+                                        contentDescription = "Longitude",
+                                        tint = Color(0xFFD32F2F),
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "Longitude",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = secondaryTextColor,
+                                            fontSize = 10.sp
+                                        )
+                                        Text(
+                                            text = convertToDMS(currentLocation.longitude, false),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = textColor,
+                                            fontSize = 12.sp
+                                        )
+                                    }
+                                }
+                            }
                         }
 
                         // Navigation buttons
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(top = 8.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween
+                                .padding(bottom = 12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Button(
                                 onClick = {
@@ -669,13 +768,16 @@ fun VisualizeLA(
                                 enabled = currentCropIndex > 0,
                                 modifier = Modifier
                                     .weight(1f)
-                                    .padding(end = 6.dp)
-                                    .height(36.dp),
-                                contentPadding = PaddingValues(4.dp)
+                                    .height(40.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF1976D2),
+                                    disabledContainerColor = if (isDarkMode) Color(0xFF404040) else Color(0xFFE0E0E0)
+                                ),
+                                contentPadding = PaddingValues(8.dp)
                             ) {
-                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Previous", modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(2.dp))
-                                Text("Prev", fontSize = 10.sp)
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Previous", modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Prev", fontSize = 12.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
                             }
 
                             Button(
@@ -690,13 +792,16 @@ fun VisualizeLA(
                                 enabled = currentCropIndex < cropLocationsList.size - 1,
                                 modifier = Modifier
                                     .weight(1f)
-                                    .padding(start = 6.dp)
-                                    .height(36.dp),
-                                contentPadding = PaddingValues(4.dp)
+                                    .height(40.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF388E3C),
+                                    disabledContainerColor = if (isDarkMode) Color(0xFF404040) else Color(0xFFE0E0E0)
+                                ),
+                                contentPadding = PaddingValues(8.dp)
                             ) {
-                                Text("Next", fontSize = 10.sp)
-                                Spacer(modifier = Modifier.width(2.dp))
-                                Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Next", modifier = Modifier.size(16.dp))
+                                Text("Next", fontSize = 12.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Next", modifier = Modifier.size(18.dp))
                             }
                         }
 
@@ -705,57 +810,202 @@ fun VisualizeLA(
                             onClick = { showCropNavigator = false },
                             modifier = Modifier
                                 .align(Alignment.CenterHorizontally)
-                                .padding(top = 6.dp)
-                                .height(32.dp),
-                            contentPadding = PaddingValues(4.dp)
+                                .height(38.dp)
+                                .fillMaxWidth(0.6f),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (isDarkMode) Color(0xFF404040) else Color(0xFFE0E0E0)
+                            ),
+                            contentPadding = PaddingValues(8.dp)
                         ) {
-                            Text("Back to List", fontSize = 10.sp)
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "Close",
+                                tint = textColor,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Back to List", fontSize = 11.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium, color = textColor)
                         }
                     }
                 }
             } else {
-                // Crop List Dialog
+                // Enhanced Crop List Dialog with dark mode support
+                val isDarkMode = isDarkModeState.value
+                val backgroundColor = if (isDarkMode) Color(0xFF121212) else Color.White
+                val surfaceColor = if (isDarkMode) Color(0xFF1E1E1E) else Color(0xFFFAFAFA)
+                val textColor = if (isDarkMode) Color.White else Color.Black
+                val secondaryTextColor = if (isDarkMode) Color(0xFFB0B0B0) else Color(0xFF757575)
+
                 AlertDialog(
                     onDismissRequest = { showCropListDialog = false },
-                    title = { Text("Crop Locations") },
+                    modifier = Modifier
+                        .fillMaxWidth(0.92f),
+                    containerColor = backgroundColor,
+                    titleContentColor = textColor,
+                    textContentColor = textColor,
+                    title = {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(
+                                    Icons.Default.Agriculture,
+                                    contentDescription = "Crops",
+                                    tint = Color(0xFF4CAF50),
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Text(
+                                    "Crop Locations",
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    color = textColor
+                                )
+                            }
+                            Surface(
+                                color = if (isDarkMode) Color(0xFF2D2D2D) else Color(0xFFE8F5E9),
+                                shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp)
+                            ) {
+                                Text(
+                                    text = "${cropLocationsList.size} items",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (isDarkMode) Color(0xFF81C784) else Color(0xFF2E7D32),
+                                    fontSize = 11.sp,
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                )
+                            }
+                        }
+                    },
                     text = {
-                        LazyColumn {
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 400.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
                             items(cropLocationsList.size) { index ->
                                 val (cropNumber, location) = cropLocationsList[index]
-                                Column(
+                                Surface(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(8.dp)
-                                        .background(Color.LightGray, shape = androidx.compose.foundation.shape.RoundedCornerShape(4.dp))
-                                        .padding(8.dp)
                                         .clickable {
-                                            // Set current crop index and show navigator
                                             currentCropIndex = index
                                             cameraPositionState.position = CameraPosition.fromLatLngZoom(location, 50f)
                                             selectedMarkerPosition = location
                                             showCropNavigator = true
-                                        }
+                                        },
+                                    color = surfaceColor,
+                                    shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+                                    border = BorderStroke(
+                                        width = 1.dp,
+                                        color = if (isDarkMode) Color(0xFF333333) else Color(0xFFEEEEEE)
+                                    )
                                 ) {
-                                    Text(
-                                        text = "$crop $cropNumber",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        modifier = Modifier.padding(bottom = 4.dp)
-                                    )
-                                    Text(
-                                        text = convertToDMS(location.latitude, true),
-                                        style = MaterialTheme.typography.bodySmall
-                                    )
-                                    Text(
-                                        text = convertToDMS(location.longitude, false),
-                                        style = MaterialTheme.typography.bodySmall
-                                    )
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                    ) {
+                                        // Index badge
+                                        Surface(
+                                            color = Color(0xFF4CAF50),
+                                            shape = androidx.compose.foundation.shape.CircleShape,
+                                            modifier = Modifier.size(32.dp)
+                                        ) {
+                                            Box(
+                                                contentAlignment = Alignment.Center,
+                                                modifier = Modifier.fillMaxSize()
+                                            ) {
+                                                Text(
+                                                    text = cropNumber.toString(),
+                                                    color = Color.White,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontSize = 13.sp,
+                                                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                                                )
+                                            }
+                                        }
+
+                                        // Content
+                                        Column(
+                                            modifier = Modifier.weight(1f),
+                                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            Text(
+                                                text = "$crop #$cropNumber",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = textColor,
+                                                fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                                                fontSize = 13.sp
+                                            )
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.LocationOn,
+                                                    contentDescription = "Location",
+                                                    tint = Color(0xFF1976D2),
+                                                    modifier = Modifier.size(14.dp)
+                                                )
+                                                Text(
+                                                    text = convertToDMS(location.latitude, true),
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = secondaryTextColor,
+                                                    fontSize = 11.sp,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            }
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.LocationOn,
+                                                    contentDescription = "Coordinates",
+                                                    tint = Color(0xFFD32F2F),
+                                                    modifier = Modifier.size(14.dp)
+                                                )
+                                                Text(
+                                                    text = convertToDMS(location.longitude, false),
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = secondaryTextColor,
+                                                    fontSize = 11.sp,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            }
+                                        }
+
+                                        // Arrow indicator
+                                        Icon(
+                                            Icons.AutoMirrored.Filled.NavigateNext,
+                                            contentDescription = "View",
+                                            tint = if (isDarkMode) Color(0xFF666666) else Color(0xFFBDBDBD),
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
                                 }
                             }
                         }
                     },
                     confirmButton = {
-                        TextButton(onClick = { showCropListDialog = false }) {
-                            Text("Close")
+                        TextButton(
+                            onClick = { showCropListDialog = false },
+                            colors = ButtonDefaults.textButtonColors(
+                                contentColor = Color(0xFF1976D2)
+                            )
+                        ) {
+                            Text("Close", fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
                         }
                     }
                 )

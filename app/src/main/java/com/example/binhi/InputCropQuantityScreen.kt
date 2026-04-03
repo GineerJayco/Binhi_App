@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign // <-- Added Import
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 
@@ -122,7 +123,8 @@ fun InputCropQuantityScreen(navController: NavController) {
             ) {
                 Text(
                     text = "Compute Land Area and Visualize Crop Placement",
-                    color = if (isButtonEnabled) Color.White else Color.DarkGray
+                    color = if (isButtonEnabled) Color.White else Color.DarkGray,
+                    textAlign = TextAlign.Center // <-- Added alignment property here
                 )
             }
 

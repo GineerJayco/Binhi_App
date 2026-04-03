@@ -64,8 +64,15 @@ fun SavedDataScreen(
 fun SessionListView(
     navController: NavController,
     soilDataViewModel: SoilDataViewModel,
-    onSessionSelected: (SavedSession) -> Unit
+    onSessionSelected: (SavedSession) -> Unit,
+    isDarkModeState: MutableState<Boolean> = mutableStateOf(false)
 ) {
+    val isDarkMode = isDarkModeState.value
+    val bgColor = if (isDarkMode) Color(0xFF121212) else Color.White
+    val textColor = if (isDarkMode) Color.White else Color.Black
+    val cardBgColor = if (isDarkMode) Color(0xFF1E1E1E) else Color.White
+    val secondaryTextColor = if (isDarkMode) Color.LightGray else Color.Gray
+
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var sessionToDelete by remember { mutableStateOf<SavedSession?>(null) }
     var showSessionDetails by remember { mutableStateOf(false) }
@@ -74,15 +81,18 @@ fun SessionListView(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .background(bgColor)
             .padding(16.dp),
         verticalArrangement = Arrangement.Top,
         horizontalAlignment = Alignment.Start
     ) {
+        Spacer(modifier = Modifier.height(16.dp))
+
         IconButton(onClick = { navController.navigateUp() }) {
             Icon(
                 imageVector = Icons.Default.ArrowBack,
                 contentDescription = "Back",
-                tint = Color.Black
+                tint = textColor
             )
         }
 
@@ -90,6 +100,7 @@ fun SessionListView(
             text = "Saved Sessions",
             fontSize = 28.sp,
             fontWeight = FontWeight.Bold,
+            color = textColor,
             modifier = Modifier
                 .padding(16.dp)
                 .align(Alignment.CenterHorizontally)
@@ -109,13 +120,13 @@ fun SessionListView(
                 Text(
                     text = "No saved data yet",
                     fontSize = 16.sp,
-                    color = Color.Gray
+                    color = secondaryTextColor
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = "Save a session from GetSoilData to see it here",
                     fontSize = 12.sp,
-                    color = Color.LightGray
+                    color = if (isDarkMode) Color.DarkGray else Color.LightGray
                 )
             }
         } else {
@@ -138,7 +149,8 @@ fun SessionListView(
                         onInfoClick = {
                             selectedSessionForDetails = session
                             showSessionDetails = true
-                        }
+                        },
+                        isDarkModeState = isDarkModeState
                     )
                 }
             }
@@ -152,9 +164,9 @@ fun SessionListView(
                 showDeleteConfirm = false
                 sessionToDelete = null
             },
-            title = { Text("Delete Session?") },
+            title = { Text("Delete Session?", color = textColor) },
             text = {
-                Text("Are you sure you want to delete '${sessionToDelete!!.sessionName}'? This action cannot be undone.")
+                Text("Are you sure you want to delete '${sessionToDelete!!.sessionName}'? This action cannot be undone.", color = textColor)
             },
             confirmButton = {
                 Button(
@@ -175,9 +187,10 @@ fun SessionListView(
                     showDeleteConfirm = false
                     sessionToDelete = null
                 }) {
-                    Text("Cancel")
+                    Text("Cancel", color = textColor)
                 }
-            }
+            },
+            containerColor = bgColor
         )
     }
 
@@ -188,7 +201,8 @@ fun SessionListView(
             onDismiss = {
                 showSessionDetails = false
                 selectedSessionForDetails = null
-            }
+            },
+            isDarkModeState = isDarkModeState
         )
     }
 }
@@ -197,8 +211,12 @@ fun SessionListView(
 @Composable
 fun SavedSessionMapView(
     session: SavedSession,
-    onBackClick: () -> Unit
+    onBackClick: () -> Unit,
+    isDarkModeState: MutableState<Boolean> = mutableStateOf(false)
 ) {
+    val isDarkMode = isDarkModeState.value
+    val bottomSheetBgColor = if (isDarkMode) Color(0xFF1E1E1E) else Color.Black
+    val bottomSheetTextColor = if (isDarkMode) Color.White else Color.White
     val polygonCenter = LatLng(session.polygonCenter.first, session.polygonCenter.second)
     val cameraPositionState = rememberCameraPositionState {
         position = CameraPosition.fromLatLngZoom(polygonCenter, session.cameraZoom)
@@ -311,13 +329,13 @@ fun SavedSessionMapView(
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .fillMaxWidth()
-                .background(Color.Black.copy(alpha = 0.7f), shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
+                .background(bottomSheetBgColor.copy(alpha = 0.9f), shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
                 text = "Session Information",
-                color = Color.White,
+                color = bottomSheetTextColor,
                 fontWeight = FontWeight.Bold,
                 fontSize = 14.sp
             )
@@ -368,6 +386,8 @@ fun SavedSessionMapView(
     if (showDotDialog && selectedDot != null) {
         val dotPair = SavedSession.latLngToPair(selectedDot!!)
         val soilData = session.soilDataPoints[dotPair]
+        val dialogBgColor = if (isDarkMode) Color(0xFF1E1E1E) else Color.White
+        val dialogTextColor = if (isDarkMode) Color.White else Color.Black
 
         Dialog(
             onDismissRequest = {
@@ -380,7 +400,7 @@ fun SavedSessionMapView(
                     .fillMaxWidth(0.95f)
                     .padding(16.dp),
                 colors = CardDefaults.cardColors(
-                    containerColor = Color.White
+                    containerColor = dialogBgColor
                 )
             ) {
                 Column(
@@ -391,19 +411,22 @@ fun SavedSessionMapView(
                 ) {
                     Text(
                         text = "Sample Location Data",
-                        style = MaterialTheme.typography.titleLarge
+                        style = MaterialTheme.typography.titleLarge,
+                        color = dialogTextColor
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = "Latitude: ${String.format("%.6f", selectedDot!!.latitude)}°",
-                        style = MaterialTheme.typography.bodySmall
+                        style = MaterialTheme.typography.bodySmall,
+                        color = dialogTextColor
                     )
                     Text(
                         text = "Longitude: ${String.format("%.6f", selectedDot!!.longitude)}°",
-                        style = MaterialTheme.typography.bodySmall
+                        style = MaterialTheme.typography.bodySmall,
+                        color = dialogTextColor
                     )
 
-                    Divider(modifier = Modifier.padding(vertical = 12.dp))
+                    Divider(modifier = Modifier.padding(vertical = 12.dp), color = if (isDarkMode) Color.DarkGray else Color.LightGray)
 
                     if (soilData != null) {
                         Text(
@@ -417,12 +440,12 @@ fun SavedSessionMapView(
                             modifier = Modifier.fillMaxWidth(),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            DataRowItem("Nitrogen", "${soilData.nitrogen}")
-                            DataRowItem("Phosphorus", "${soilData.phosphorus}")
-                            DataRowItem("Potassium", "${soilData.potassium}")
-                            DataRowItem("pH Level", String.format("%.2f", soilData.phLevel))
-                            DataRowItem("Temperature", String.format("%.1f", soilData.temperature) + "°C")
-                            DataRowItem("Moisture", "${soilData.moisture}%")
+                            DataRowItem("Nitrogen", "${soilData.nitrogen}", isDarkMode)
+                            DataRowItem("Phosphorus", "${soilData.phosphorus}", isDarkMode)
+                            DataRowItem("Potassium", "${soilData.potassium}", isDarkMode)
+                            DataRowItem("pH Level", String.format("%.2f", soilData.phLevel), isDarkMode)
+                            DataRowItem("Temperature", String.format("%.1f", soilData.temperature) + "°C", isDarkMode)
+                            DataRowItem("Moisture", "${soilData.moisture}%", isDarkMode)
                         }
                     }
 
@@ -435,7 +458,7 @@ fun SavedSessionMapView(
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Close")
+                        Text("Close", color = Color.Blue)
                     }
                 }
             }
@@ -467,15 +490,22 @@ fun SessionCard(
     session: SavedSession,
     onDetailsClick: () -> Unit,
     onDeleteClick: () -> Unit,
-    onInfoClick: () -> Unit
+    onInfoClick: () -> Unit,
+    isDarkModeState: MutableState<Boolean> = mutableStateOf(false)
 ) {
+    val isDarkMode = isDarkModeState.value
+    val cardBgColor = if (isDarkMode) Color(0xFF1E1E1E) else Color.White
+    val textColor = if (isDarkMode) Color.White else Color.Black
+    val secondaryTextColor = if (isDarkMode) Color.LightGray else Color.Gray
+    val dividerColor = if (isDarkMode) Color.DarkGray else Color.LightGray
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onDetailsClick() }
-            .background(Color.White, shape = RoundedCornerShape(12.dp)),
+            .background(cardBgColor, shape = RoundedCornerShape(12.dp)),
         colors = CardDefaults.cardColors(
-            containerColor = Color.White
+            containerColor = cardBgColor
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
@@ -498,12 +528,12 @@ fun SessionCard(
                         text = session.sessionName,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color.Black
+                        color = textColor
                     )
                     Text(
                         text = session.getFormattedDate(),
                         fontSize = 12.sp,
-                        color = Color.Gray
+                        color = secondaryTextColor
                     )
                 }
                 Row(
@@ -535,12 +565,12 @@ fun SessionCard(
                 }
             }
 
-            Divider(color = Color.LightGray)
+            Divider(color = dividerColor)
 
             Text(
                 text = session.getCompletionInfo(),
                 fontSize = 12.sp,
-                color = Color.DarkGray
+                color = secondaryTextColor
             )
 
             LinearProgressIndicator(
@@ -553,7 +583,7 @@ fun SessionCard(
                     .fillMaxWidth()
                     .height(4.dp),
                 color = Color(0xFF4CAF50),
-                trackColor = Color.LightGray
+                trackColor = if (isDarkMode) Color.DarkGray else Color.LightGray
             )
         }
     }
@@ -562,12 +592,18 @@ fun SessionCard(
 @Composable
 fun SessionDetailsDialog(
     session: SavedSession,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    isDarkModeState: MutableState<Boolean> = mutableStateOf(false)
 ) {
+    val isDarkMode = isDarkModeState.value
+    val bgColor = if (isDarkMode) Color(0xFF1E1E1E) else Color.White
+    val textColor = if (isDarkMode) Color.White else Color.Black
+    val secondaryTextColor = if (isDarkMode) Color.LightGray else Color.Gray
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Text(session.sessionName)
+            Text(session.sessionName, color = textColor)
         },
         text = {
             LazyColumn(
@@ -578,51 +614,53 @@ fun SessionDetailsDialog(
                     Text(
                         text = "Session Details",
                         fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp
+                        fontSize = 14.sp,
+                        color = textColor
                     )
                 }
                 item {
-                    Text("Date: ${session.getFormattedDate()}", fontSize = 12.sp)
+                    Text("Date: ${session.getFormattedDate()}", fontSize = 12.sp, color = secondaryTextColor)
                 }
                 item {
-                    Text("Crop: ${session.crop}", fontSize = 12.sp)
+                    Text("Crop: ${session.crop}", fontSize = 12.sp, color = secondaryTextColor)
                 }
                 item {
-                    Text("Land Area: ${session.landArea} m²", fontSize = 12.sp)
+                    Text("Land Area: ${session.landArea} m²", fontSize = 12.sp, color = secondaryTextColor)
                 }
                 item {
-                    Text("Field Size: ${session.length}m × ${session.width}m", fontSize = 12.sp)
+                    Text("Field Size: ${session.length}m × ${session.width}m", fontSize = 12.sp, color = secondaryTextColor)
                 }
                 item {
-                    Text("Total Dots: ${session.totalDots}", fontSize = 12.sp)
+                    Text("Total Dots: ${session.totalDots}", fontSize = 12.sp, color = secondaryTextColor)
                 }
                 item {
-                    Text("Data Points: ${session.soilDataPoints.size}", fontSize = 12.sp)
+                    Text("Data Points: ${session.soilDataPoints.size}", fontSize = 12.sp, color = secondaryTextColor)
                 }
                 item {
-                    Text("Completion: ${(session.soilDataPoints.size * 100) / maxOf(session.totalDots, 1)}%", fontSize = 12.sp)
+                    Text("Completion: ${(session.soilDataPoints.size * 100) / maxOf(session.totalDots, 1)}%", fontSize = 12.sp, color = secondaryTextColor)
                 }
                 item {
-                    Text("Map Type: ${session.mapType}", fontSize = 12.sp)
+                    Text("Map Type: ${session.mapType}", fontSize = 12.sp, color = secondaryTextColor)
                 }
                 item {
-                    Text("Rotation: ${String.format("%.1f", session.rotation)}°", fontSize = 12.sp)
+                    Text("Rotation: ${String.format("%.1f", session.rotation)}°", fontSize = 12.sp, color = secondaryTextColor)
                 }
                 item {
-                    Text("Zoom: ${String.format("%.1f", session.cameraZoom)}", fontSize = 12.sp)
+                    Text("Zoom: ${String.format("%.1f", session.cameraZoom)}", fontSize = 12.sp, color = secondaryTextColor)
                 }
             }
         },
         confirmButton = {
             TextButton(onClick = onDismiss) {
-                Text("Close")
+                Text("Close", color = Color.Blue)
             }
-        }
+        },
+        containerColor = bgColor
     )
 }
 
 @Composable
-fun DataRowItem(label: String, value: String) {
+fun DataRowItem(label: String, value: String, isDarkMode: Boolean = false) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -632,14 +670,14 @@ fun DataRowItem(label: String, value: String) {
         Text(
             text = label,
             fontSize = 12.sp,
-            color = Color.DarkGray,
+            color = if (isDarkMode) Color.LightGray else Color.DarkGray,
             modifier = Modifier.weight(1f)
         )
         Text(
             text = value,
             fontSize = 12.sp,
             fontWeight = FontWeight.SemiBold,
-            color = Color.Black
+            color = if (isDarkMode) Color.White else Color.Black
         )
     }
 }

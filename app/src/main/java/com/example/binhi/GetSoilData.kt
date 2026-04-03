@@ -917,9 +917,17 @@ fun GetSoilData(
                     mapType = if (checked) MapType.SATELLITE else MapType.NORMAL
                 }
             )
+        }
 
+        Column(
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .padding(end = 8.dp, top = 500.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        )
+        {
             MapScaleBar(
-                modifier = Modifier.padding(top = 8.dp),
+                modifier = Modifier.padding(0.dp),
                 cameraPositionState = cameraPositionState
             )
         }

@@ -430,7 +430,7 @@ fun ConversionToolCard(
                         containerColor = if (conversionMode == 1) Color(0xFF4CAF50) else Color.LightGray
                     )
                 ) {
-                    Text("Length & Width", color = Color.Black, style = MaterialTheme.typography.labelSmall)
+                    Text("Length", color = Color.Black, style = MaterialTheme.typography.labelSmall)
                 }
             }
 
@@ -697,7 +697,7 @@ fun ConversionToolDialog(
                             containerColor = if (conversionMode == 1) Color(0xFF4CAF50) else Color.LightGray
                         )
                     ) {
-                        Text("Length & Width", color = Color.Black)
+                        Text("Length", color = Color.Black, maxLines = 1, softWrap = false)
                     }
                 }
 
