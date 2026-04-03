@@ -244,6 +244,8 @@ fun VisualizeLA(
     var lastRotation by remember { mutableFloatStateOf(0f) }
     var radarScale by remember { mutableFloatStateOf(1f) }
     var radarAlpha by remember { mutableFloatStateOf(1f) }
+    var showCropNavigator by remember { mutableStateOf(false) }
+    var currentCropIndex by remember { mutableStateOf(0) }
 
     // Animate radar when crop is selected
     LaunchedEffect(selectedMarkerPosition) {
@@ -438,12 +440,6 @@ fun VisualizeLA(
             )
         }
 
-        MapScaleBar(
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(16.dp),
-            cameraPositionState = cameraPositionState
-        )
 
         TopAppBar(
             title = { },
@@ -556,6 +552,11 @@ fun VisualizeLA(
                     mapType = if (checked) MapType.SATELLITE else MapType.NORMAL
                 }
             )
+
+            MapScaleBar(
+                modifier = Modifier.padding(top = 8.dp),
+                cameraPositionState = cameraPositionState
+            )
         }
 
         Button(
@@ -604,50 +605,161 @@ fun VisualizeLA(
             )
         }
 
-        if (showCropListDialog) {
-            AlertDialog(
-                onDismissRequest = { showCropListDialog = false },
-                title = { Text("Crop Locations") },
-                text = {
-                    LazyColumn {
-                        items(cropLocationsList.size) { index ->
-                            val (cropNumber, location) = cropLocationsList[index]
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(8.dp)
-                                    .background(Color.LightGray, shape = androidx.compose.foundation.shape.RoundedCornerShape(4.dp))
-                                    .padding(8.dp)
-                                    .clickable {
-                                        // Navigate to the crop location with super zoom
+        if (showCropListDialog && cropLocationsList.isNotEmpty()) {
+            // Crop Navigator Panel at the top
+            if (showCropNavigator) {
+                val (currentCropNumber, currentLocation) = cropLocationsList[currentCropIndex]
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .fillMaxWidth(0.85f)
+                        .background(Color.White, shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
+                        .padding(12.dp)
+                        .padding(top = 8.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        // Header with crop name and count
+                        Text(
+                            text = "$crop ${currentCropNumber} (${currentCropIndex + 1} of ${cropLocationsList.size})",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontSize = 14.sp,
+                            modifier = Modifier
+                                .padding(bottom = 6.dp)
+                                .align(Alignment.CenterHorizontally)
+                        )
+
+                        // Coordinates
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(4.dp)
+                                .background(Color(0xFFF0F0F0), shape = androidx.compose.foundation.shape.RoundedCornerShape(4.dp))
+                                .padding(6.dp)
+                        ) {
+                            Text(
+                                text = "Latitude: ${convertToDMS(currentLocation.latitude, true)}",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontSize = 11.sp
+                            )
+                            Text(
+                                text = "Longitude: ${convertToDMS(currentLocation.longitude, false)}",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontSize = 11.sp
+                            )
+                        }
+
+                        // Navigation buttons
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Button(
+                                onClick = {
+                                    if (currentCropIndex > 0) {
+                                        currentCropIndex--
+                                        val (_, location) = cropLocationsList[currentCropIndex]
                                         cameraPositionState.position = CameraPosition.fromLatLngZoom(location, 50f)
                                         selectedMarkerPosition = location
-                                        showCropListDialog = false
                                     }
+                                },
+                                enabled = currentCropIndex > 0,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .padding(end = 6.dp)
+                                    .height(36.dp),
+                                contentPadding = PaddingValues(4.dp)
                             ) {
-                                Text(
-                                    text = "$crop $cropNumber",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    modifier = Modifier.padding(bottom = 4.dp)
-                                )
-                                Text(
-                                    text = convertToDMS(location.latitude, true),
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                                Text(
-                                    text = convertToDMS(location.longitude, false),
-                                    style = MaterialTheme.typography.bodySmall
-                                )
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Previous", modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(2.dp))
+                                Text("Prev", fontSize = 10.sp)
+                            }
+
+                            Button(
+                                onClick = {
+                                    if (currentCropIndex < cropLocationsList.size - 1) {
+                                        currentCropIndex++
+                                        val (_, location) = cropLocationsList[currentCropIndex]
+                                        cameraPositionState.position = CameraPosition.fromLatLngZoom(location, 50f)
+                                        selectedMarkerPosition = location
+                                    }
+                                },
+                                enabled = currentCropIndex < cropLocationsList.size - 1,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .padding(start = 6.dp)
+                                    .height(36.dp),
+                                contentPadding = PaddingValues(4.dp)
+                            ) {
+                                Text("Next", fontSize = 10.sp)
+                                Spacer(modifier = Modifier.width(2.dp))
+                                Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Next", modifier = Modifier.size(16.dp))
                             }
                         }
-                    }
-                },
-                confirmButton = {
-                    TextButton(onClick = { showCropListDialog = false }) {
-                        Text("Close")
+
+                        // Close button
+                        Button(
+                            onClick = { showCropNavigator = false },
+                            modifier = Modifier
+                                .align(Alignment.CenterHorizontally)
+                                .padding(top = 6.dp)
+                                .height(32.dp),
+                            contentPadding = PaddingValues(4.dp)
+                        ) {
+                            Text("Back to List", fontSize = 10.sp)
+                        }
                     }
                 }
-            )
+            } else {
+                // Crop List Dialog
+                AlertDialog(
+                    onDismissRequest = { showCropListDialog = false },
+                    title = { Text("Crop Locations") },
+                    text = {
+                        LazyColumn {
+                            items(cropLocationsList.size) { index ->
+                                val (cropNumber, location) = cropLocationsList[index]
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(8.dp)
+                                        .background(Color.LightGray, shape = androidx.compose.foundation.shape.RoundedCornerShape(4.dp))
+                                        .padding(8.dp)
+                                        .clickable {
+                                            // Set current crop index and show navigator
+                                            currentCropIndex = index
+                                            cameraPositionState.position = CameraPosition.fromLatLngZoom(location, 50f)
+                                            selectedMarkerPosition = location
+                                            showCropNavigator = true
+                                        }
+                                ) {
+                                    Text(
+                                        text = "$crop $cropNumber",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        modifier = Modifier.padding(bottom = 4.dp)
+                                    )
+                                    Text(
+                                        text = convertToDMS(location.latitude, true),
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                    Text(
+                                        text = convertToDMS(location.longitude, false),
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { showCropListDialog = false }) {
+                            Text("Close")
+                        }
+                    }
+                )
+            }
         }
     }
 }

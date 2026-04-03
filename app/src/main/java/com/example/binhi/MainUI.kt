@@ -1,6 +1,7 @@
 package com.example.binhi
 
 import android.os.Bundle
+import android.view.View
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -30,6 +31,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.view.WindowCompat
 import androidx.media3.common.util.UnstableApi
 import androidx.navigation.NavController
 import androidx.navigation.NavType
@@ -45,11 +47,29 @@ import com.example.binhi.viewmodel.SoilDataViewModel
 import com.example.binhi.data.database.SoilDataDatabase
 import com.example.binhi.data.database.SessionRepository
 
+@UnstableApi
 class MainUI : ComponentActivity() {
-    @UnstableApi
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Enable edge-to-edge display
         enableEdgeToEdge()
+
+        // Tell Android to layout behind system bars
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+
+        // Set transparent system bars
+        window.statusBarColor = android.graphics.Color.TRANSPARENT
+        window.navigationBarColor = android.graphics.Color.TRANSPARENT
+
+        // Hide navigation bar with immersive sticky mode
+        window.decorView.systemUiVisibility = (
+            View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
+            View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+            View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or
+            View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+        )
+
         setContent {
             val isDarkMode = remember { mutableStateOf(ThemeManager.getCurrentTheme()) }
 
@@ -187,10 +207,12 @@ fun BinhiScreen(navController: NavController, isDarkModeState: MutableState<Bool
         VideoBackground(modifier = Modifier.fillMaxSize())
 
         // Navigation bar with theme toggle and hamburger menu at far right
+        // Using statusBarsPadding() to respect system insets (status bar)
         Row(
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .padding(top = 50.dp, end = 5.dp),
+                .statusBarsPadding()
+                .padding(end = 5.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             // Theme Toggle Button
@@ -235,7 +257,7 @@ fun BinhiScreen(navController: NavController, isDarkModeState: MutableState<Bool
             enter = slideInHorizontally(initialOffsetX = { fullWidth -> -fullWidth }),
             modifier = Modifier
                 .align(Alignment.TopStart)
-                .padding(16.dp)
+                .padding(start = 10.dp, top = 0.dp, end = 10.dp, bottom = 50.dp)
         ) {
             Image(
                 painter = painterResource(id = R.drawable.binhi_logo2),
@@ -248,6 +270,7 @@ fun BinhiScreen(navController: NavController, isDarkModeState: MutableState<Bool
         Column(
             modifier = modifier
                 .fillMaxSize()
+                .navigationBarsPadding()
                 .padding(16.dp),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally

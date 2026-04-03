@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Modern Material 3 Dark Theme for Binhi App -->
+G    <!-- Modern Material 3 Dark Theme for Binhi App with Edge-to-Edge Display -->
     <style name="Theme.Binhi" parent="Theme.Material3.Dark">
         <!-- Primary Brand Color (Green for agriculture) -->
         <item name="colorPrimary">@color/md_theme_dark_primary</item>
@@ -25,5 +25,15 @@
         <item name="colorOnError">@color/md_theme_dark_on_error</item>
         <item name="colorErrorContainer">@color/md_theme_dark_error_container</item>
         <item name="colorOnErrorContainer">@color/md_theme_dark_on_error_container</item>
+
+        <!-- Edge-to-Edge Display Configuration -->
+        <!-- Status bar: transparent background with light icons for dark backgrounds -->
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <!-- Navigation bar: transparent background -->
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <!-- Enable drawing system bar backgrounds -->
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
     </style>
 </resources>

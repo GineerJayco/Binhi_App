@@ -57,8 +57,11 @@ fun BinhiTheme(
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            window.statusBarColor = colorScheme.primary.toArgb()
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
+            // DO NOT override status bar color - let theme.xml handle it for edge-to-edge
+            // window.statusBarColor = colorScheme.primary.toArgb()  // ❌ REMOVED
+
+            // Only set the icon color based on theme
+            WindowCompat.getInsetsController(window, view)?.isAppearanceLightStatusBars = !darkTheme
         }
     }
 

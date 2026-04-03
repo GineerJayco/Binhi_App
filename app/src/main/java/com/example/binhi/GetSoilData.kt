@@ -797,12 +797,6 @@ fun GetSoilData(
             }
         }
 
-        MapScaleBar(
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(16.dp),
-            cameraPositionState = cameraPositionState
-        )
 
         TopAppBar(
             title = { },
@@ -922,6 +916,11 @@ fun GetSoilData(
                 onCheckedChange = { checked ->
                     mapType = if (checked) MapType.SATELLITE else MapType.NORMAL
                 }
+            )
+
+            MapScaleBar(
+                modifier = Modifier.padding(top = 8.dp),
+                cameraPositionState = cameraPositionState
             )
         }
 
