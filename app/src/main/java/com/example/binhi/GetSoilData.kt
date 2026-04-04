@@ -65,6 +65,25 @@ private fun decimalToDMS(decimal: Double, isLatitude: Boolean): String {
     return String.format("%d° %d' %.4f\" %s", degrees, minutes, seconds, direction)
 }
 
+// Utility function to compute distance between two LatLng points in meters using Haversine formula
+private fun computeDistanceBetweenTwoPoints(point1: LatLng, point2: LatLng): Double {
+    val earthRadiusKm = 6371.0 // Earth's radius in kilometers
+
+    val lat1Rad = Math.toRadians(point1.latitude)
+    val lat2Rad = Math.toRadians(point2.latitude)
+    val deltaLat = Math.toRadians(point2.latitude - point1.latitude)
+    val deltaLon = Math.toRadians(point2.longitude - point1.longitude)
+
+    val a = sin(deltaLat / 2) * sin(deltaLat / 2) +
+            cos(lat1Rad) * cos(lat2Rad) *
+            sin(deltaLon / 2) * sin(deltaLon / 2)
+
+    val c = 2 * atan2(sqrt(a), sqrt(1 - a))
+    val distanceKm = earthRadiusKm * c
+
+    return distanceKm * 1000 // Convert to meters
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GetSoilData(
@@ -86,6 +105,7 @@ fun GetSoilData(
     var polygonCenter by remember { mutableStateOf(dumaguete) }
     var selectedDot by remember { mutableStateOf<LatLng?>(null) }
     var showDialog by remember { mutableStateOf(false) }
+    var previousPolygonCenter by remember { mutableStateOf(dumaguete) }
 
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -170,6 +190,31 @@ fun GetSoilData(
         Log.d("SoilData", "Dots grid created: ${dots.size} dots")
     }
 
+    // Restore polygon state if returning from MappingInfo
+    LaunchedEffect(Unit) {
+        val restoredState = soilDataViewModel.restoreTempPolygonState()
+        if (restoredState != null) {
+            polygonCenter = restoredState.first
+            rotation = restoredState.second
+            cameraPositionState.position = CameraPosition.fromLatLngZoom(restoredState.first, 15f)
+            previousPolygonCenter = restoredState.first  // Set previousPolygonCenter to match restored center to avoid clearing data
+            Log.d("GetSoilData", "✓ Polygon state restored from MappingInfo navigation - Data preserved")
+        }
+    }
+
+    // Detect when polygon center has changed and clear stored data
+    LaunchedEffect(polygonCenter) {
+        val distance = computeDistanceBetweenTwoPoints(previousPolygonCenter, polygonCenter)
+        // If polygon moved more than 1 meter, clear all stored data and reset
+        if (distance > 1.0) {
+            Log.d("SoilData", "Polygon dragged (${String.format("%.1f", distance)}m) - Clearing stored data")
+            soilDataViewModel.clearAllData()
+            previousPolygonCenter = polygonCenter
+            selectedDot = null
+            showDialog = false
+        }
+    }
+
     var hasLocationPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(
@@ -180,6 +225,27 @@ fun GetSoilData(
                 Manifest.permission.ACCESS_COARSE_LOCATION
             ) == PackageManager.PERMISSION_GRANTED
         )
+    }
+
+    // Auto-fetch location on screen load
+    LaunchedEffect(Unit) {
+        if (hasLocationPermission) {
+            try {
+                val locationResult = fusedLocationClient.lastLocation
+                locationResult.addOnCompleteListener(ContextCompat.getMainExecutor(context)) { task ->
+                    if (task.isSuccessful && task.result != null) {
+                        val result = LatLng(task.result.latitude, task.result.longitude)
+                        cameraPositionState.position = CameraPosition.fromLatLngZoom(result, 15f)
+                        polygonCenter = result
+                        Log.d("GetSoilData", "✓ Location auto-fetched: $result")
+                    } else {
+                        Log.w("GetSoilData", "Failed to auto-fetch location, using default")
+                    }
+                }
+            } catch (e: SecurityException) {
+                Log.e("GetSoilData", "SecurityException during auto-fetch: ${e.message}")
+            }
+        }
     }
 
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -940,6 +1006,8 @@ fun GetSoilData(
         Button(
             onClick = {
                 Log.d("GetSoilData", "Get Crop Recommendation clicked - All ${soilDataViewModel.totalDotsCount} dots have data")
+                // Save polygon state before navigating
+                soilDataViewModel.saveTempPolygonState(polygonCenter, rotation)
                 navController.navigate("mapping_info")
             },
             modifier = Modifier

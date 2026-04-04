@@ -160,7 +160,7 @@ class MainUI : ComponentActivity() {
                         MappingInfo(navController = navController, soilDataViewModel = soilDataViewModel, isDarkModeState = isDarkMode)
                     }
                     composable("crop_recommendation") {
-                        CropRecommendation(navController = navController, soilDataViewModel = soilDataViewModel, isDarkModeState = isDarkMode)
+                        CropRecommendation(navController = navController, soilDataViewModel = soilDataViewModel)
                     }
                     composable("saved_data") {
                         SavedDataScreen(navController = navController, soilDataViewModel = soilDataViewModel, isDarkModeState = isDarkMode)

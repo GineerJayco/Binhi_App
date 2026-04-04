@@ -178,6 +178,27 @@ fun VisualizeCQ(
         )
     }
 
+    // Auto-fetch location on screen load
+    LaunchedEffect(Unit) {
+        if (hasLocationPermission) {
+            try {
+                val locationResult = fusedLocationClient.lastLocation
+                locationResult.addOnCompleteListener(ContextCompat.getMainExecutor(context)) { task ->
+                    if (task.isSuccessful && task.result != null) {
+                        val result = LatLng(task.result.latitude, task.result.longitude)
+                        cameraPositionState.position = CameraPosition.fromLatLngZoom(result, 15f)
+                        polygonCenter = result
+                        Log.d("VisualizeCQ", "✓ Location auto-fetched: $result")
+                    } else {
+                        Log.w("VisualizeCQ", "Failed to auto-fetch location, using default")
+                    }
+                }
+            } catch (e: SecurityException) {
+                Log.e("VisualizeCQ", "SecurityException during auto-fetch: ${e.message}")
+            }
+        }
+    }
+
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
         onResult = { isGranted: Boolean ->

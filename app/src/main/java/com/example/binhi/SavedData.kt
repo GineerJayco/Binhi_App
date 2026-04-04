@@ -10,7 +10,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.ArrowDropUp
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.*
 import androidx.compose.runtime.MutableState
 import androidx.compose.ui.Alignment
@@ -55,7 +60,10 @@ fun SavedDataScreen(
             onBackClick = {
                 showSessionList = true
                 selectedSession = null
-            }
+            },
+            navController = navController,
+            soilDataViewModel = soilDataViewModel,
+            isDarkModeState = isDarkModeState
         )
     }
 }
@@ -77,6 +85,9 @@ fun SessionListView(
     var sessionToDelete by remember { mutableStateOf<SavedSession?>(null) }
     var showSessionDetails by remember { mutableStateOf(false) }
     var selectedSessionForDetails by remember { mutableStateOf<SavedSession?>(null) }
+    var showRenameDialog by remember { mutableStateOf(false) }
+    var sessionToRename by remember { mutableStateOf<SavedSession?>(null) }
+    var newSessionName by remember { mutableStateOf("") }
 
     Column(
         modifier = Modifier
@@ -88,23 +99,33 @@ fun SessionListView(
     ) {
         Spacer(modifier = Modifier.height(16.dp))
 
-        IconButton(onClick = { navController.navigateUp() }) {
-            Icon(
-                imageVector = Icons.Default.ArrowBack,
-                contentDescription = "Back",
-                tint = textColor
+        // Back button aligned with title
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp),
+            horizontalArrangement = Arrangement.Start,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(
+                onClick = { navController.navigateUp() },
+                modifier = Modifier.size(40.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.ArrowBack,
+                    contentDescription = "Back",
+                    tint = textColor
+                )
+            }
+
+            Text(
+                text = "Saved Sessions",
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold,
+                color = textColor,
+                modifier = Modifier.align(Alignment.CenterVertically)
             )
         }
-
-        Text(
-            text = "Saved Sessions",
-            fontSize = 28.sp,
-            fontWeight = FontWeight.Bold,
-            color = textColor,
-            modifier = Modifier
-                .padding(16.dp)
-                .align(Alignment.CenterHorizontally)
-        )
 
         val savedSessions = soilDataViewModel.getAllSavedSessions()
         Log.d("SavedDataScreen", "Displaying ${savedSessions.size} saved sessions")
@@ -149,6 +170,11 @@ fun SessionListView(
                         onInfoClick = {
                             selectedSessionForDetails = session
                             showSessionDetails = true
+                        },
+                        onRenameClick = {
+                            sessionToRename = session
+                            newSessionName = session.sessionName
+                            showRenameDialog = true
                         },
                         isDarkModeState = isDarkModeState
                     )
@@ -205,6 +231,65 @@ fun SessionListView(
             isDarkModeState = isDarkModeState
         )
     }
+
+    // Rename dialog
+    if (showRenameDialog && sessionToRename != null) {
+        AlertDialog(
+            onDismissRequest = {
+                showRenameDialog = false
+                sessionToRename = null
+                newSessionName = ""
+            },
+            title = { Text("Rename Session", color = textColor) },
+            text = {
+                Column {
+                    Text("Enter new name for '${sessionToRename!!.sessionName}':", color = textColor)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    TextField(
+                        value = newSessionName,
+                        onValueChange = { newSessionName = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = if (isDarkMode) Color(0xFF2A2A2A) else Color.White,
+                            unfocusedContainerColor = if (isDarkMode) Color(0xFF2A2A2A) else Color.White,
+                            focusedTextColor = textColor,
+                            unfocusedTextColor = textColor,
+                            cursorColor = if (isDarkMode) Color.White else Color.Black,
+                            focusedIndicatorColor = Color.Blue,
+                            unfocusedIndicatorColor = Color.Gray
+                        ),
+                        singleLine = true
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (newSessionName.isNotBlank() && sessionToRename != null) {
+                            val updatedSession = sessionToRename!!.copy(sessionName = newSessionName)
+                            soilDataViewModel.updateSessionName(sessionToRename!!.id, newSessionName)
+                            showRenameDialog = false
+                            sessionToRename = null
+                            newSessionName = ""
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Blue)
+                ) {
+                    Text("Rename")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showRenameDialog = false
+                    sessionToRename = null
+                    newSessionName = ""
+                }) {
+                    Text("Cancel", color = textColor)
+                }
+            },
+            containerColor = bgColor
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -212,6 +297,8 @@ fun SessionListView(
 fun SavedSessionMapView(
     session: SavedSession,
     onBackClick: () -> Unit,
+    navController: NavController,
+    soilDataViewModel: SoilDataViewModel,
     isDarkModeState: MutableState<Boolean> = mutableStateOf(false)
 ) {
     val isDarkMode = isDarkModeState.value
@@ -224,6 +311,7 @@ fun SavedSessionMapView(
 
     var selectedDot by remember { mutableStateOf<LatLng?>(null) }
     var showDotDialog by remember { mutableStateOf(false) }
+    var isSessionInfoExpanded by remember { mutableStateOf(false) }
 
     val dots = remember(session) {
         session.soilDataPoints.keys.map { pair ->
@@ -325,61 +413,114 @@ fun SavedSessionMapView(
             modifier = Modifier.align(Alignment.TopStart)
         )
 
-        Column(
+        // Floating action button at top right corner (only icon)
+        FloatingActionButton(
+            onClick = { isSessionInfoExpanded = !isSessionInfoExpanded },
+            containerColor = Color(0xFF2196F3),
+            contentColor = Color.White,
             modifier = Modifier
-                .align(Alignment.BottomStart)
-                .fillMaxWidth()
-                .background(bottomSheetBgColor.copy(alpha = 0.9f), shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .align(Alignment.TopEnd)
+                .padding(16.dp)
+                .size(48.dp)
         ) {
-            Text(
-                text = "Session Information",
-                color = bottomSheetTextColor,
-                fontWeight = FontWeight.Bold,
-                fontSize = 14.sp
+            Icon(
+                imageVector = if (isSessionInfoExpanded) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
+                contentDescription = if (isSessionInfoExpanded) "Hide Session Info" else "Show Session Info",
+                modifier = Modifier.size(24.dp)
             )
+        }
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column {
-                    SessionInfoItem("Crop", session.crop)
-                    SessionInfoItem("Area", "${session.landArea.toInt()} m²")
-                }
-                Column {
-                    SessionInfoItem("Total Dots", "${session.totalDots}")
-                    SessionInfoItem("Data Points", "${session.soilDataPoints.size}")
-                }
-            }
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column {
-                    SessionInfoItem("Rotation", "${String.format("%.1f", session.rotation)}°")
-                    SessionInfoItem("Map Type", session.mapType)
-                }
-                Column {
-                    SessionInfoItem("Zoom", "${String.format("%.1f", session.cameraZoom)}")
-                    SessionInfoItem("Date", session.getFormattedDate())
-                }
-            }
+        // Get Crop Recommendation button at bottom center (behind the Session Info panel)
+        Button(
+            onClick = {
+                // Load session data into ViewModel before navigating to MappingInfo
+                soilDataViewModel.loadSession(session)
+                // Navigate to MappingInfo with session data now available
+                navController.navigate("mapping_info")
+            },
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 20.dp)
+                .height(44.dp)
+                .widthIn(min = 200.dp, max = 300.dp)
+        ) {
+            Text("Get Crop Recommendation", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+        }
 
-            LinearProgressIndicator(
-                progress = if (session.totalDots > 0) {
-                    session.soilDataPoints.size.toFloat() / session.totalDots.toFloat()
-                } else {
-                    0f
-                },
+        // Session Information Panel - appears only when FAB is clicked
+        if (isSessionInfoExpanded) {
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(4.dp),
-                color = Color(0xFF4CAF50),
-                trackColor = Color.Gray
-            )
+                    .align(Alignment.BottomStart)
+                    .fillMaxWidth(0.85f)
+                    .background(bottomSheetBgColor.copy(alpha = 0.95f), shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
+                    .padding(8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                // Header with title only
+                Text(
+                    text = "Session Information",
+                    color = bottomSheetTextColor,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 11.sp,
+                    modifier = Modifier.padding(start = 4.dp, top = 2.dp)
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        SessionInfoItem("Crop", session.crop)
+                        SessionInfoItem("Area", "${session.landArea.toInt()} m²")
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        SessionInfoItem("Dots", "${session.totalDots}")
+                        SessionInfoItem("Data Pts", "${session.soilDataPoints.size}")
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        SessionInfoItem("Rotation", "${String.format("%.1f", session.rotation)}°")
+                        SessionInfoItem("Map", session.mapType)
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        SessionInfoItem("Zoom", "${String.format("%.1f", session.cameraZoom)}")
+                        SessionInfoItem("Date", session.getFormattedDate())
+                    }
+                }
+
+                LinearProgressIndicator(
+                    progress = if (session.totalDots > 0) {
+                        session.soilDataPoints.size.toFloat() / session.totalDots.toFloat()
+                    } else {
+                        0f
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(2.dp),
+                    color = Color(0xFF4CAF50),
+                    trackColor = Color.Gray
+                )
+
+                // Bottom left expand/collapse icon
+                Icon(
+                    imageVector = Icons.Default.ArrowDropDown,
+                    contentDescription = "Collapse",
+                    tint = bottomSheetTextColor,
+                    modifier = Modifier
+                        .size(18.dp)
+                        .clickable { isSessionInfoExpanded = false }
+                        .align(Alignment.Start)
+                        .padding(start = 2.dp, bottom = 2.dp)
+                )
+            }
         }
     }
 
@@ -491,7 +632,8 @@ fun SessionCard(
     onDetailsClick: () -> Unit,
     onDeleteClick: () -> Unit,
     onInfoClick: () -> Unit,
-    isDarkModeState: MutableState<Boolean> = mutableStateOf(false)
+    isDarkModeState: MutableState<Boolean> = mutableStateOf(false),
+    onRenameClick: () -> Unit = {}
 ) {
     val isDarkMode = isDarkModeState.value
     val cardBgColor = if (isDarkMode) Color(0xFF1E1E1E) else Color.White
@@ -540,6 +682,17 @@ fun SessionCard(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    IconButton(
+                        onClick = onRenameClick,
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = "Rename",
+                            tint = Color.Cyan,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                     IconButton(
                         onClick = onInfoClick,
                         modifier = Modifier.size(32.dp)

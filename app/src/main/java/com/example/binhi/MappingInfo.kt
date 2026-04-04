@@ -9,6 +9,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -66,7 +67,6 @@ fun MappingInfo(
 ) {
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
     var locationToDelete by remember { mutableStateOf<LatLng?>(null) }
-    var showDeleteAllConfirmDialog by remember { mutableStateOf(false) }
 
     // Get all stored locations and sort them - compute directly to ensure updates
     val sortedLocations = soilDataViewModel.getAllStoredLocations()
@@ -166,51 +166,26 @@ fun MappingInfo(
                     )
 
                     // Action Buttons Row - Inside Summary Card
-                    Row(
+                    // Analyze Button
+                    Button(
+                        onClick = {
+                            navController.navigate("crop_recommendation")
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
+                            .height(44.dp)
                             .padding(top = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        enabled = hasData,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF4CAF50),
+                            disabledContainerColor = Color.LightGray
+                        )
                     ) {
-                        // Analyze Button
-                        Button(
-                            onClick = {
-                                navController.navigate("crop_recommendation")
-                            },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(44.dp),
-                            enabled = hasData,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFF4CAF50),
-                                disabledContainerColor = Color.LightGray
-                            )
-                        ) {
-                            Text(
-                                "Analyze",
-                                color = if (hasData) Color.White else Color.Gray,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-
-                        // Delete All Button
-                        Button(
-                            onClick = {
-                                showDeleteAllConfirmDialog = true
-                            },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(44.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFFFF5722)
-                            )
-                        ) {
-                            Text(
-                                "Delete All",
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
+                        Text(
+                            "Analyze",
+                            color = if (hasData) Color.White else Color.Gray,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
             }
@@ -274,77 +249,6 @@ fun MappingInfo(
         }
     }
 
-    // Delete All Confirmation Dialog
-    if (showDeleteAllConfirmDialog) {
-        Dialog(
-            onDismissRequest = {
-                showDeleteAllConfirmDialog = false
-            }
-        ) {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth(0.9f)
-                    .padding(16.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = Color.White
-                )
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Delete,
-                        contentDescription = "Delete",
-                        modifier = Modifier.size(48.dp),
-                        tint = Color.Red
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        "Delete All Data?",
-                        style = MaterialTheme.typography.headlineSmall
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        "This will permanently remove all ${sortedLocations.size} soil sample records.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.Gray,
-                        textAlign = TextAlign.Center
-                    )
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        TextButton(
-                            onClick = {
-                                showDeleteAllConfirmDialog = false
-                            },
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("Cancel")
-                        }
-                        Button(
-                            onClick = {
-                                soilDataViewModel.clearAllData()
-                                Log.d("MappingInfo", "Deleted all soil data")
-                                showDeleteAllConfirmDialog = false
-                            },
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color.Red
-                            )
-                        ) {
-                            Text("Delete All", color = Color.White)
-                        }
-                    }
-                }
-            }
-        }
-    }
 
     // Delete Confirmation Dialog
     if (showDeleteConfirmDialog && locationToDelete != null) {

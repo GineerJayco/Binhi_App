@@ -45,6 +45,13 @@ class SoilDataViewModel(
     var isLoadingFromDatabase by mutableStateOf(false)
 
     /**
+     * Store temporary polygon state for navigation
+     * Used to preserve polygon center and rotation when navigating to MappingInfo
+     */
+    var tempPolygonCenter by mutableStateOf<LatLng?>(null)
+    var tempPolygonRotation by mutableStateOf(0f)
+
+    /**
      * Derived state that checks if all dots have saved soil data
      * Returns true only when:
      * - totalDotsCount > 0
@@ -274,6 +281,38 @@ class SoilDataViewModel(
     }
 
     /**
+     * Update the name of a saved session
+     */
+    fun updateSessionName(sessionId: String, newName: String) {
+        savedSessions = savedSessions.map { session ->
+            if (session.id == sessionId) {
+                session.copy(sessionName = newName)
+            } else {
+                session
+            }
+        }
+
+        // Update in database
+        if (sessionRepository != null) {
+            viewModelScope.launch {
+                try {
+                    val session = savedSessions.find { it.id == sessionId }
+                    if (session != null) {
+                        val success = sessionRepository.updateSession(session)
+                        if (success) {
+                            Log.d("SoilDataViewModel", "✓ Session name updated in database: $sessionId -> $newName")
+                        } else {
+                            Log.e("SoilDataViewModel", "Failed to update session name in database")
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e("SoilDataViewModel", "Error updating session name: ${e.message}", e)
+                }
+            }
+        }
+    }
+
+    /**
      * Get a saved session by ID
      */
     fun getSavedSession(sessionId: String): SavedSession? {
@@ -286,6 +325,38 @@ class SoilDataViewModel(
     fun clearCurrentSession() {
         soilDataStorage = mutableMapOf()
         totalDotsCount = 0
+    }
+
+    /**
+     * Save temporary polygon state when navigating away from GetSoilData
+     * @param center The polygon center (LatLng)
+     * @param rotation The polygon rotation in degrees
+     */
+    fun saveTempPolygonState(center: LatLng, rotation: Float) {
+        tempPolygonCenter = center
+        tempPolygonRotation = rotation
+        Log.d("SoilDataViewModel", "✓ Polygon state saved: center=$center, rotation=$rotation")
+    }
+
+    /**
+     * Restore temporary polygon state when returning to GetSoilData
+     * @return Pair of LatLng center and Float rotation, or null if not saved
+     */
+    fun restoreTempPolygonState(): Pair<LatLng, Float>? {
+        return if (tempPolygonCenter != null) {
+            Log.d("SoilDataViewModel", "✓ Polygon state restored: center=$tempPolygonCenter, rotation=$tempPolygonRotation")
+            Pair(tempPolygonCenter!!, tempPolygonRotation)
+        } else {
+            null
+        }
+    }
+
+    /**
+     * Clear temporary polygon state
+     */
+    fun clearTempPolygonState() {
+        tempPolygonCenter = null
+        tempPolygonRotation = 0f
     }
 }
 
