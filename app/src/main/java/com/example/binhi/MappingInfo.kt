@@ -58,6 +58,50 @@ private fun formatTimestamp(timestamp: Long): String {
     return sdf.format(Date(timestamp))
 }
 
+/**
+ * Calculate average soil parameters from all stored locations
+ */
+private fun calculateAverageSoilParameters(
+    locations: List<LatLng>,
+    viewModel: SoilDataViewModel
+): AverageSoilParameters? {
+    if (locations.isEmpty()) return null
+
+    var totalNitrogen = 0.0
+    var totalPhosphorus = 0.0
+    var totalPotassium = 0.0
+    var totalPhLevel = 0.0
+    var totalMoisture = 0.0
+    var totalTemperature = 0.0
+    var validCount = 0
+
+    for (location in locations) {
+        val soilData = viewModel.getSoilData(location)
+        if (soilData != null) {
+            totalNitrogen += soilData.nitrogen
+            totalPhosphorus += soilData.phosphorus
+            totalPotassium += soilData.potassium
+            totalPhLevel += soilData.phLevel
+            totalMoisture += soilData.moisture
+            totalTemperature += soilData.temperature
+            validCount++
+        }
+    }
+
+    return if (validCount > 0) {
+        AverageSoilParameters(
+            avgNitrogen = totalNitrogen / validCount,
+            avgPhosphorus = totalPhosphorus / validCount,
+            avgPotassium = totalPotassium / validCount,
+            avgPhLevel = totalPhLevel / validCount,
+            avgMoisture = totalMoisture / validCount,
+            avgTemperature = totalTemperature / validCount
+        )
+    } else {
+        null
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MappingInfo(
@@ -75,6 +119,9 @@ fun MappingInfo(
 
     // Check if data is available for Analyze button
     val hasData = sortedLocations.isNotEmpty()
+
+    // Calculate average soil parameters
+    val averageParameters = calculateAverageSoilParameters(sortedLocations, soilDataViewModel)
 
     // Log when locations change
     LaunchedEffect(sortedLocations.size) {
@@ -153,6 +200,9 @@ fun MappingInfo(
                     }
 
                     Divider(modifier = Modifier.padding(vertical = 8.dp))
+
+                    // Average Soil Parameters Section (Expandable)
+                    AverageSoilParametersSection(averageParameters)
 
                     Text(
                         text = if (sortedLocations.isEmpty()) {
