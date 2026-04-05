@@ -219,7 +219,18 @@ fun MappingInfo(
                     // Analyze Button
                     Button(
                         onClick = {
-                            navController.navigate("crop_recommendation")
+                            // Pass average parameters to crop recommendation
+                            if (averageParameters != null) {
+                                navController.navigate(
+                                    "crop_recommendation/true/" +
+                                            "${averageParameters.avgNitrogen}/" +
+                                            "${averageParameters.avgPhosphorus}/" +
+                                            "${averageParameters.avgPotassium}/" +
+                                            "${averageParameters.avgPhLevel}/" +
+                                            "${averageParameters.avgMoisture}/" +
+                                            "${averageParameters.avgTemperature}"
+                                )
+                            }
                         },
                         modifier = Modifier
                             .fillMaxWidth()

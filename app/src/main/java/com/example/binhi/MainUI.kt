@@ -159,6 +159,30 @@ class MainUI : ComponentActivity() {
                     composable("mapping_info") {
                         MappingInfo(navController = navController, soilDataViewModel = soilDataViewModel, isDarkModeState = isDarkMode)
                     }
+                    composable(
+                        route = "crop_recommendation/{skipStart}/{avgN}/{avgP}/{avgK}/{avgPH}/{avgMoist}/{avgTemp}",
+                        arguments = listOf(
+                            navArgument("skipStart") { type = NavType.BoolType; defaultValue = false },
+                            navArgument("avgN") { type = NavType.FloatType; defaultValue = 0f },
+                            navArgument("avgP") { type = NavType.FloatType; defaultValue = 0f },
+                            navArgument("avgK") { type = NavType.FloatType; defaultValue = 0f },
+                            navArgument("avgPH") { type = NavType.FloatType; defaultValue = 0f },
+                            navArgument("avgMoist") { type = NavType.FloatType; defaultValue = 0f },
+                            navArgument("avgTemp") { type = NavType.FloatType; defaultValue = 0f }
+                        )
+                    ) { backStackEntry ->
+                        CropRecommendation(
+                            navController = navController,
+                            soilDataViewModel = soilDataViewModel,
+                            skipStartScreen = backStackEntry.arguments?.getBoolean("skipStart") ?: false,
+                            avgNitrogen = backStackEntry.arguments?.getFloat("avgN"),
+                            avgPhosphorus = backStackEntry.arguments?.getFloat("avgP"),
+                            avgPotassium = backStackEntry.arguments?.getFloat("avgK"),
+                            avgPhLevel = backStackEntry.arguments?.getFloat("avgPH"),
+                            avgMoisture = backStackEntry.arguments?.getFloat("avgMoist"),
+                            avgTemperature = backStackEntry.arguments?.getFloat("avgTemp")
+                        )
+                    }
                     composable("crop_recommendation") {
                         CropRecommendation(navController = navController, soilDataViewModel = soilDataViewModel)
                     }

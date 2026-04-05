@@ -277,21 +277,30 @@ fun getDefaultRecommendations(): List<CropPrediction> {
 @Composable
 fun CropRecommendationScreen(
     navController: NavController,
-    soilDataViewModel: SoilDataViewModel = viewModel()
+    soilDataViewModel: SoilDataViewModel = viewModel(),
+    skipStartScreen: Boolean = false,
+    avgNitrogen: Float? = null,
+    avgPhosphorus: Float? = null,
+    avgPotassium: Float? = null,
+    avgPhLevel: Float? = null,
+    avgMoisture: Float? = null,
+    avgTemperature: Float? = null
 ) {
     val context = LocalContext.current
-    var currentStep by remember { mutableStateOf(CropRecommendationStep.START) }
+    var currentStep by remember {
+        mutableStateOf(if (skipStartScreen) CropRecommendationStep.LOADING else CropRecommendationStep.START)
+    }
     var predictions by remember { mutableStateOf<List<CropPrediction>>(emptyList()) }
     var error by remember { mutableStateOf<String?>(null) }
     var showErrorDialog by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
 
-    // Step 1: Start Screen
-    if (currentStep == CropRecommendationStep.START) {
-        StartScreen(
-            onStartClick = { currentStep = CropRecommendationStep.LOADING },
-            navController = navController
-        )
+    // Step 1: Start Screen (skipped if parameters provided)
+    if (currentStep == CropRecommendationStep.START && !skipStartScreen) {
+        // Auto-transition to loading when start screen would be shown
+        LaunchedEffect(Unit) {
+            currentStep = CropRecommendationStep.LOADING
+        }
         return
     }
 
@@ -341,24 +350,57 @@ fun CropRecommendationScreen(
                     LaunchedEffect(Unit) {
                         coroutineScope.launch(Dispatchers.Default) {
                             try {
-                                val allLocations = soilDataViewModel.getAllStoredLocations().toList()
-                                val soilDataList = allLocations.mapNotNull { location ->
-                                    soilDataViewModel.getSoilData(location)
-                                }
+                                // Check if we have direct parameters passed from MappingInfo
+                                if (skipStartScreen && avgNitrogen != null && avgPhosphorus != null &&
+                                    avgPotassium != null && avgPhLevel != null && avgMoisture != null &&
+                                    avgTemperature != null) {
 
-                                Log.d("CropRecommendation", "Loaded ${soilDataList.size} soil data samples")
+                                    Log.d("CropRecommendation", "Using passed average parameters for inference")
+                                    Log.d("CropRecommendation",
+                                        "Avg - N: $avgNitrogen, P: $avgPhosphorus, K: $avgPotassium, " +
+                                        "pH: $avgPhLevel, Temp: $avgTemperature, Moisture: $avgMoisture")
 
-                                if (soilDataList.isEmpty()) {
-                                    error = "No soil data collected. Please collect soil samples first."
-                                    showErrorDialog = true
-                                    currentStep = CropRecommendationStep.START
+                                    // Create a synthetic SoilData list with single entry for inference
+                                    val syntheticSoilData = listOf(
+                                        SoilData(
+                                            nitrogen = avgNitrogen.toInt(),
+                                            phosphorus = avgPhosphorus.toInt(),
+                                            potassium = avgPotassium.toInt(),
+                                            phLevel = avgPhLevel,
+                                            temperature = avgTemperature,
+                                            moisture = avgMoisture.toInt(),
+                                            timestamp = System.currentTimeMillis()
+                                        )
+                                    )
+
+                                    predictions = runOnnxInference(context, syntheticSoilData)
+                                    Log.d("CropRecommendation", "Generated ${predictions.size} predictions from passed parameters")
+
                                 } else {
+                                    // Fallback: Load from ViewModel if no parameters provided
+                                    Log.d("CropRecommendation", "Loading data from ViewModel as fallback")
+                                    val allLocations = soilDataViewModel.getAllStoredLocations().toList()
+                                    val soilDataList = allLocations.mapNotNull { location ->
+                                        soilDataViewModel.getSoilData(location)
+                                    }
+
+                                    Log.d("CropRecommendation", "Loaded ${soilDataList.size} soil data samples")
+
+                                    if (soilDataList.isEmpty()) {
+                                        error = "No soil data collected. Please collect soil samples first."
+                                        showErrorDialog = true
+                                        currentStep = CropRecommendationStep.START
+                                        return@launch
+                                    }
+
                                     predictions = runOnnxInference(context, soilDataList)
                                     Log.d("CropRecommendation", "Generated ${predictions.size} predictions")
-                                    // Simulate some processing time for better UX
-                                    kotlinx.coroutines.delay(1500)
-                                    currentStep = CropRecommendationStep.RESULTS
                                 }
+
+                                // Simulate some processing time for better UX
+                                kotlinx.coroutines.delay(1500)
+                                currentStep = CropRecommendationStep.RESULTS
+
                             } catch (e: Exception) {
                                 Log.e("CropRecommendation", "Error loading data: ${e.message}", e)
                                 error = "Error loading crop recommendations: ${e.message}"
@@ -436,161 +478,6 @@ fun CropRecommendationScreen(
     }
 }
 
-/**
- * Start Screen Composable - Shows welcome message and start button
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun StartScreen(onStartClick: () -> Unit, navController: NavController) {
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        "Crop Recommendation",
-                        style = MaterialTheme.typography.headlineSmall,
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = Color.White
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color(0xFF2196F3)
-                ),
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-    ) { paddingValues ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            Color(0xFF2196F3).copy(alpha = 0.1f),
-                            Color(0xFF4CAF50).copy(alpha = 0.1f)
-                        )
-                    )
-                )
-                .padding(paddingValues)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                // Decorative Icon
-                Box(
-                    modifier = Modifier
-                        .size(120.dp)
-                        .background(
-                            color = Color(0xFF2196F3).copy(alpha = 0.1f),
-                            shape = RoundedCornerShape(24.dp)
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        "🌾",
-                        fontSize = 64.sp
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(32.dp))
-
-                // Title
-                Text(
-                    "Crop Recommendation System",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF2196F3),
-                    textAlign = TextAlign.Center,
-                    fontSize = 28.sp
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Description
-                Text(
-                    "Get personalized crop recommendations based on your soil analysis. Click the button below to analyze your soil data and discover the best crops for your farm.",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = Color.Gray,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(horizontal = 8.dp)
-                )
-
-                Spacer(modifier = Modifier.height(40.dp))
-
-                // Features List
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(
-                            color = Color.White,
-                            shape = RoundedCornerShape(16.dp)
-                        )
-                        .padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    FeatureItem(emoji = "📊", text = "AI-Powered Analysis")
-                    FeatureItem(emoji = "🎯", text = "Accurate Predictions")
-                    FeatureItem(emoji = "📈", text = "Confidence Scores")
-                }
-
-                Spacer(modifier = Modifier.height(40.dp))
-
-                // Start Button
-                Button(
-                    onClick = onStartClick,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF4CAF50)
-                    ),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text(
-                        "Start Analysis",
-                        color = Color.White,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 18.sp
-                    )
-                }
-            }
-        }
-    }
-}
-
-/**
- * Feature Item Composable for the start screen
- */
-@Composable
-fun FeatureItem(emoji: String, text: String) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Text(emoji, fontSize = 24.sp)
-        Text(
-            text,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = Color.Black
-        )
-    }
-}
 
 /**
  * Loading Screen Composable
@@ -917,8 +804,25 @@ fun CropPredictionCard(prediction: CropPrediction) {
 @Composable
 fun CropRecommendation(
     navController: NavController,
-    soilDataViewModel: SoilDataViewModel = viewModel()
+    soilDataViewModel: SoilDataViewModel = viewModel(),
+    skipStartScreen: Boolean = false,
+    avgNitrogen: Float? = null,
+    avgPhosphorus: Float? = null,
+    avgPotassium: Float? = null,
+    avgPhLevel: Float? = null,
+    avgMoisture: Float? = null,
+    avgTemperature: Float? = null
 ) {
-    CropRecommendationScreen(navController = navController, soilDataViewModel = soilDataViewModel)
+    CropRecommendationScreen(
+        navController = navController,
+        soilDataViewModel = soilDataViewModel,
+        skipStartScreen = skipStartScreen,
+        avgNitrogen = avgNitrogen,
+        avgPhosphorus = avgPhosphorus,
+        avgPotassium = avgPotassium,
+        avgPhLevel = avgPhLevel,
+        avgMoisture = avgMoisture,
+        avgTemperature = avgTemperature
+    )
 }
 
