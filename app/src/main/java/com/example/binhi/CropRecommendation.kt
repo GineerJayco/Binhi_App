@@ -6,9 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
@@ -146,7 +144,7 @@ fun runOnnxInference(
             val sessionOptions = ai.onnxruntime.OrtSession.SessionOptions()
 
             // Load model from assets
-            val modelAsset = context.assets.open("crop_recommendation.onnx")
+            val modelAsset = context.assets.open("crop_recommendation_model.onnx")
             val modelBytes = modelAsset.readBytes()
             modelAsset.close()
 
@@ -669,124 +667,127 @@ fun EmptyScreen() {
  */
 @Composable
 fun ResultsScreen(predictions: List<CropPrediction>) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Summary Card
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
-            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Column(
+        // Summary Card Header
+        item {
+            Card(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                shape = RoundedCornerShape(12.dp)
             ) {
-                Text(
-                    "Top Recommendation",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.Gray,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-
-                val topCrop = predictions.firstOrNull()
-                if (topCrop != null) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
                     Text(
-                        topCrop.icon,
-                        fontSize = 48.sp
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        topCrop.cropName,
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF2196F3)
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        "${topCrop.percentage}% Match",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = topCrop.color
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        topCrop.reasoning,
+                        "Top Recommendation",
                         style = MaterialTheme.typography.bodySmall,
                         color = Color.Gray,
-                        textAlign = TextAlign.Center
+                        fontWeight = FontWeight.Bold
                     )
-                }
+                    Spacer(modifier = Modifier.height(8.dp))
 
-                // Summary Stats Row
-                Spacer(modifier = Modifier.height(16.dp))
-                HorizontalDivider()
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    val topCrop = predictions.firstOrNull()
+                    if (topCrop != null) {
                         Text(
-                            "${predictions.size}",
+                            topCrop.icon,
+                            fontSize = 48.sp
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            topCrop.cropName,
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFF2196F3)
                         )
+                        Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            "Options",
+                            "${topCrop.percentage}% Match",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = topCrop.color
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            topCrop.reasoning,
                             style = MaterialTheme.typography.bodySmall,
-                            color = Color.Gray
+                            color = Color.Gray,
+                            textAlign = TextAlign.Center
                         )
                     }
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            "${(predictions.map { it.confidence }.average() * 100).roundToInt()}%",
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF4CAF50)
-                        )
-                        Text(
-                            "Avg. Confidence",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color.Gray
-                        )
+
+                    // Summary Stats Row
+                    Spacer(modifier = Modifier.height(16.dp))
+                    HorizontalDivider()
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                "${predictions.size}",
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF2196F3)
+                            )
+                            Text(
+                                "Options",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.Gray
+                            )
+                        }
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                "${(predictions.map { it.confidence }.average() * 100).roundToInt()}%",
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF4CAF50)
+                            )
+                            Text(
+                                "Avg. Confidence",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.Gray
+                            )
+                        }
                     }
                 }
             }
         }
 
         // Recommendations Title
-        Text(
-            "All Recommendations",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(start = 16.dp, top = 8.dp, end = 16.dp)
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
+        item {
+            Text(
+                "All Recommendations",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(start = 16.dp, top = 8.dp, end = 16.dp)
+            )
+        }
 
         // Predictions List
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp)
-                .padding(bottom = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = PaddingValues(bottom = 16.dp)
-        ) {
-            items(predictions) { prediction ->
+        items(predictions) { prediction ->
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+            ) {
                 CropPredictionCard(prediction = prediction)
             }
+        }
+
+        // Bottom spacing
+        item {
+            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }
