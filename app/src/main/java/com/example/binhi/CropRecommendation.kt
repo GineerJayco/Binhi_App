@@ -52,12 +52,14 @@ data class CropPrediction(
 
 // Object for crop-related constants and utility functions
 object CropConstants {
+    // IMPORTANT: Order MUST match LabelEncoder.classes_ from mango_mock_data.py
+    // LabelEncoder uses alphabetical order: Banana, Cassava, Corn, Mango, Sweet Potato
     val CROP_NAMES = listOf(
-        "Banana",
-        "Cassava",
-        "Sweet Potato",
-        "Corn",
-        "Mango"
+        "Banana",           // Index 0 - Model output[0]
+        "Cassava",          // Index 1 - Model output[1]
+        "Corn",             // Index 2 - Model output[2]
+        "Mango",            // Index 3 - Model output[3]
+        "Sweet Potato"      // Index 4 - Model output[4]
     )
 
     // Map crop names to their display colors
@@ -126,17 +128,18 @@ fun runOnnxInference(
                     "pH: $avgPhLevel, Temp: $avgTemperature, Moisture: $avgMoisture"
         )
 
-        // Normalize the input data (0-1 range)
-        val normalizedInputData = floatArrayOf(
-            avgNitrogen / 100f,      // Nitrogen: 0-100 mg/kg
-            avgPhosphorus / 100f,    // Phosphorus: 0-100 mg/kg
-            avgPotassium / 100f,     // Potassium: 0-100 mg/kg
-            avgPhLevel / 14f,        // pH Level: 0-14
-            (avgTemperature + 40f) / 90f,  // Temperature: -40 to 50°C
-            avgMoisture / 100f       // Moisture: 0-100%
+        // Use raw input data WITHOUT normalization
+        // The model was trained on raw data, not normalized data
+        val rawInputData = floatArrayOf(
+            avgNitrogen,      // Nitrogen: raw mg/kg value
+            avgPhosphorus,    // Phosphorus: raw mg/kg value
+            avgPotassium,     // Potassium: raw mg/kg value
+            avgPhLevel,       // pH Level: raw value (3.0-9.0)
+            avgTemperature,   // Temperature: raw °C value
+            avgMoisture       // Moisture: raw % value
         )
 
-        Log.d("CropRecommendation", "Normalized input: ${normalizedInputData.contentToString()}")
+        Log.d("CropRecommendation", "Raw input (no normalization): ${rawInputData.contentToString()}")
 
         // Load and run ONNX model
         val predictions = try {
@@ -151,42 +154,96 @@ fun runOnnxInference(
             val session = ortEnv.createSession(modelBytes, sessionOptions)
 
             // Create input tensor - use simpler API without allocator
-            val inputTensor = ai.onnxruntime.OnnxTensor.createTensor(ortEnv, normalizedInputData)
+            val inputTensor = ai.onnxruntime.OnnxTensor.createTensor(ortEnv, rawInputData)
 
             // Get input and output names
             val inputName = session.inputNames?.firstOrNull()
                 ?: throw IllegalStateException("No input names found in model")
-            val outputName = session.outputNames?.firstOrNull()
-                ?: throw IllegalStateException("No output names found in model")
 
-            Log.d("CropRecommendation", "Input name: $inputName, Output name: $outputName")
+            // The ONNX model has 2 outputs:
+            // 0: output_label - predicted class index
+            // 1: output_probability - probabilities dict {0: prob, 1: prob, ...}
+            val outputNamesList: List<String> = session.outputNames?.toList() ?: emptyList()
+            if (outputNamesList.size < 2) {
+                throw IllegalStateException("Expected 2 outputs from model (label and probability), got ${outputNamesList.size}")
+            }
+
+            val labelOutputName: String = outputNamesList.getOrNull(0) ?: throw IllegalStateException("No label output found")
+            val probOutputName: String = outputNamesList.getOrNull(1) ?: throw IllegalStateException("No probability output found")
+
+            Log.d("CropRecommendation", "Input name: $inputName")
+            Log.d("CropRecommendation", "Label output name: $labelOutputName")
+            Log.d("CropRecommendation", "Probability output name: $probOutputName")
 
             // Run inference
             val results = session.run(mapOf(inputName to inputTensor))
 
-            // Extract confidence scores
-            val confidences = results[outputName]?.let { output ->
-                when (output) {
-                    is ai.onnxruntime.OnnxTensor -> {
+            // Extract confidence scores from probability output
+            val confidences: List<Float> = try {
+                val output: Any? = results[probOutputName]
+                Log.d("CropRecommendation", "Output is List: ${output is List<*>}, is Map: ${output is Map<*, *>}, is Tensor: ${output is ai.onnxruntime.OnnxTensor}")
+
+                val scores: MutableList<Float> = mutableListOf()
+
+                when {
+                    output is List<*> && output.isNotEmpty() -> {
+                        // output_probability is returned as List<Map<*, *>>
+                        try {
+                            val firstElement: Any? = output[0]
+                            if (firstElement is Map<*, *>) {
+                                for (i in 0 until CropConstants.CROP_NAMES.size) {
+                                    val rawValue: Any? = (firstElement as Map<*, *>)[i]
+                                    val floatValue: Float = when (rawValue) {
+                                        is Double -> rawValue.toFloat()
+                                        is Float -> rawValue
+                                        is Number -> rawValue.toFloat()
+                                        else -> 0f
+                                    }
+                                    scores.add(floatValue)
+                                }
+                                Log.d("CropRecommendation", "Extracted ${scores.size} probability scores from list of maps")
+                            }
+                        } catch (e: Exception) {
+                            Log.e("CropRecommendation", "Error extracting from list: ${e.message}", e)
+                        }
+                    }
+                    output is Map<*, *> -> {
+                        // Fallback: direct map
+                        try {
+                            for (i in 0 until CropConstants.CROP_NAMES.size) {
+                                val rawValue: Any? = output[i]
+                                val floatValue: Float = when (rawValue) {
+                                    is Double -> rawValue.toFloat()
+                                    is Float -> rawValue
+                                    is Number -> rawValue.toFloat()
+                                    else -> 0f
+                                }
+                                scores.add(floatValue)
+                            }
+                            Log.d("CropRecommendation", "Extracted ${scores.size} probability scores from map")
+                        } catch (e: Exception) {
+                            Log.e("CropRecommendation", "Error extracting from map: ${e.message}", e)
+                        }
+                    }
+                    output is ai.onnxruntime.OnnxTensor -> {
+                        // Fallback: float tensor
                         try {
                             val floatBuffer = output.floatBuffer
-                            val scores = mutableListOf<Float>()
                             while (floatBuffer.hasRemaining()) {
                                 scores.add(floatBuffer.get())
                             }
-                            scores
+                            Log.d("CropRecommendation", "Extracted ${scores.size} probability scores from tensor")
                         } catch (e: Exception) {
-                            Log.e("CropRecommendation", "Error extracting float buffer: ${e.message}")
-                            emptyList()
+                            Log.e("CropRecommendation", "Error extracting from tensor: ${e.message}", e)
                         }
                     }
                     else -> {
-                        Log.e("CropRecommendation", "Unexpected output type: ${output?.javaClass?.simpleName}")
-                        emptyList()
+                        Log.e("CropRecommendation", "Unexpected output type: ${output?.javaClass?.simpleName ?: "null"}")
                     }
                 }
-            } ?: run {
-                Log.e("CropRecommendation", "No output found for name: $outputName")
+                scores
+            } catch (e: Exception) {
+                Log.e("CropRecommendation", "Error in confidence extraction: ${e.message}", e)
                 emptyList()
             }
 
