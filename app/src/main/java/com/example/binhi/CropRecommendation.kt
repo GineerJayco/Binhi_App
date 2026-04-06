@@ -130,16 +130,19 @@ fun runOnnxInference(
 
         // Use raw input data WITHOUT normalization
         // The model was trained on raw data, not normalized data
-        val rawInputData = floatArrayOf(
-            avgNitrogen,      // Nitrogen: raw mg/kg value
-            avgPhosphorus,    // Phosphorus: raw mg/kg value
-            avgPotassium,     // Potassium: raw mg/kg value
-            avgPhLevel,       // pH Level: raw value (3.0-9.0)
-            avgTemperature,   // Temperature: raw °C value
-            avgMoisture       // Moisture: raw % value
+        // Create 2D array [1, 6] - batch size 1, 6 features
+        val rawInputData = arrayOf(
+            floatArrayOf(
+                avgNitrogen,      // Nitrogen: raw mg/kg value
+                avgPhosphorus,    // Phosphorus: raw mg/kg value
+                avgPotassium,     // Potassium: raw mg/kg value
+                avgPhLevel,       // pH Level: raw value (3.0-9.0)
+                avgTemperature,   // Temperature: raw °C value
+                avgMoisture       // Moisture: raw % value
+            )
         )
 
-        Log.d("CropRecommendation", "Raw input (no normalization): ${rawInputData.contentToString()}")
+        Log.d("CropRecommendation", "Raw input shape [1, 6] (no normalization): ${rawInputData[0].contentToString()}")
 
         // Load and run ONNX model
         val predictions = try {
