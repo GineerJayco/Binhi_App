@@ -101,7 +101,9 @@ object CropConstants {
 
 /**
  * Runs ONNX model inference for crop recommendation
- * Inputs: Normalized soil data (N, P, K, pH, Temperature, Moisture)
+ * Uses OnnxModelRunner for proper resource management
+ *
+ * Inputs: Soil data (N, P, K, pH, Temperature, Moisture)
  * Outputs: Confidence scores for each crop
  */
 fun runOnnxInference(
@@ -128,9 +130,8 @@ fun runOnnxInference(
                     "pH: $avgPhLevel, Temp: $avgTemperature, Moisture: $avgMoisture"
         )
 
-        // Use raw input data WITHOUT normalization
-        // The model was trained on raw data, not normalized data
-        // Create 2D array [1, 6] - batch size 1, 6 features
+        // Prepare input data in shape [1, 6] - batch size 1, 6 features
+        // Order: Nitrogen, Phosphorus, Potassium, pH Level, Temperature, Moisture
         val rawInputData = arrayOf(
             floatArrayOf(
                 avgNitrogen,      // Nitrogen: raw mg/kg value
@@ -142,140 +143,64 @@ fun runOnnxInference(
             )
         )
 
-        Log.d("CropRecommendation", "Raw input shape [1, 6] (no normalization): ${rawInputData[0].contentToString()}")
+        Log.d("CropRecommendation", "Input shape [1, 6]: ${rawInputData[0].contentToString()}")
 
-        // Load and run ONNX model
-        val predictions = try {
-            val ortEnv = ai.onnxruntime.OrtEnvironment.getEnvironment()
-            val sessionOptions = ai.onnxruntime.OrtSession.SessionOptions()
+        // Get ONNX model runner instance and run inference
+        val modelRunner = OnnxModelRunner.getInstance(context)
 
-            // Load model from assets
-            val modelAsset = context.assets.open("crop_recommendation_model.onnx")
-            val modelBytes = modelAsset.readBytes()
-            modelAsset.close()
+        if (!modelRunner.isReady()) {
+            Log.w("CropRecommendation", "Model not ready, initializing...")
+            modelRunner.initializeEnvironment()
+        }
 
-            val session = ortEnv.createSession(modelBytes, sessionOptions)
+        // Execute inference
+        val results = modelRunner.runInference(rawInputData)
 
-            // Create input tensor - use simpler API without allocator
-            val inputTensor = ai.onnxruntime.OnnxTensor.createTensor(ortEnv, rawInputData)
+        // Extract probability output
+        val outputNames = modelRunner.getOutputNames()
+        if (outputNames.isNullOrEmpty()) {
+            Log.e("CropRecommendation", "No output names available from model")
+            return getDefaultRecommendations()
+        }
 
-            // Get input and output names
-            val inputName = session.inputNames?.firstOrNull()
-                ?: throw IllegalStateException("No input names found in model")
+        // Get probability output (usually the second output)
+        val probOutputName = outputNames.getOrNull(1) ?: outputNames.first()
+        val probabilityOutput = results[probOutputName]
 
-            // The ONNX model has 2 outputs:
-            // 0: output_label - predicted class index
-            // 1: output_probability - probabilities dict {0: prob, 1: prob, ...}
-            val outputNamesList: List<String> = session.outputNames?.toList() ?: emptyList()
-            if (outputNamesList.size < 2) {
-                throw IllegalStateException("Expected 2 outputs from model (label and probability), got ${outputNamesList.size}")
+        Log.d("CropRecommendation", "Probability output name: $probOutputName")
+        Log.d("CropRecommendation", "Output type: ${probabilityOutput?.javaClass?.simpleName ?: "null"}")
+
+        // Extract confidence scores using the model runner utility
+        val confidences = modelRunner.extractProbabilities(probabilityOutput, CropConstants.CROP_NAMES.size)
+
+        if (confidences.isEmpty()) {
+            Log.w("CropRecommendation", "No confidences extracted from model output")
+            return getDefaultRecommendations()
+        }
+
+        Log.d("CropRecommendation", "Extracted confidences: $confidences")
+
+        // Create predictions from confidences
+        val predictions = confidences.mapIndexed { index, confidence ->
+            val cropName = if (index < CropConstants.CROP_NAMES.size) {
+                CropConstants.CROP_NAMES[index]
+            } else {
+                "Crop $index"
             }
 
-            val labelOutputName: String = outputNamesList.getOrNull(0) ?: throw IllegalStateException("No label output found")
-            val probOutputName: String = outputNamesList.getOrNull(1) ?: throw IllegalStateException("No probability output found")
-
-            Log.d("CropRecommendation", "Input name: $inputName")
-            Log.d("CropRecommendation", "Label output name: $labelOutputName")
-            Log.d("CropRecommendation", "Probability output name: $probOutputName")
-
-            // Run inference
-            val results = session.run(mapOf(inputName to inputTensor))
-
-            // Extract confidence scores from probability output
-            val confidences: List<Float> = try {
-                val output: Any? = results[probOutputName]
-                Log.d("CropRecommendation", "Output is List: ${output is List<*>}, is Map: ${output is Map<*, *>}, is Tensor: ${output is ai.onnxruntime.OnnxTensor}")
-
-                val scores: MutableList<Float> = mutableListOf()
-
-                when {
-                    output is List<*> && output.isNotEmpty() -> {
-                        // output_probability is returned as List<Map<*, *>>
-                        try {
-                            val firstElement: Any? = output[0]
-                            if (firstElement is Map<*, *>) {
-                                for (i in 0 until CropConstants.CROP_NAMES.size) {
-                                    val rawValue: Any? = (firstElement as Map<*, *>)[i]
-                                    val floatValue: Float = when (rawValue) {
-                                        is Double -> rawValue.toFloat()
-                                        is Float -> rawValue
-                                        is Number -> rawValue.toFloat()
-                                        else -> 0f
-                                    }
-                                    scores.add(floatValue)
-                                }
-                                Log.d("CropRecommendation", "Extracted ${scores.size} probability scores from list of maps")
-                            }
-                        } catch (e: Exception) {
-                            Log.e("CropRecommendation", "Error extracting from list: ${e.message}", e)
-                        }
-                    }
-                    output is Map<*, *> -> {
-                        // Fallback: direct map
-                        try {
-                            for (i in 0 until CropConstants.CROP_NAMES.size) {
-                                val rawValue: Any? = output[i]
-                                val floatValue: Float = when (rawValue) {
-                                    is Double -> rawValue.toFloat()
-                                    is Float -> rawValue
-                                    is Number -> rawValue.toFloat()
-                                    else -> 0f
-                                }
-                                scores.add(floatValue)
-                            }
-                            Log.d("CropRecommendation", "Extracted ${scores.size} probability scores from map")
-                        } catch (e: Exception) {
-                            Log.e("CropRecommendation", "Error extracting from map: ${e.message}", e)
-                        }
-                    }
-                    output is ai.onnxruntime.OnnxTensor -> {
-                        // Fallback: float tensor
-                        try {
-                            val floatBuffer = output.floatBuffer
-                            while (floatBuffer.hasRemaining()) {
-                                scores.add(floatBuffer.get())
-                            }
-                            Log.d("CropRecommendation", "Extracted ${scores.size} probability scores from tensor")
-                        } catch (e: Exception) {
-                            Log.e("CropRecommendation", "Error extracting from tensor: ${e.message}", e)
-                        }
-                    }
-                    else -> {
-                        Log.e("CropRecommendation", "Unexpected output type: ${output?.javaClass?.simpleName ?: "null"}")
-                    }
-                }
-                scores
-            } catch (e: Exception) {
-                Log.e("CropRecommendation", "Error in confidence extraction: ${e.message}", e)
-                emptyList()
-            }
-
-            Log.d("CropRecommendation", "Raw confidences: $confidences")
-
-            // Create predictions
-            confidences.mapIndexed { index, confidence ->
-                val cropName = if (index < CropConstants.CROP_NAMES.size) {
-                    CropConstants.CROP_NAMES[index]
-                } else {
-                    "Crop $index"
-                }
-
-                CropPrediction(
-                    cropName = cropName,
-                    confidence = confidence.coerceIn(0f, 1f),
-                    percentage = (confidence * 100).roundToInt().coerceIn(0, 100),
-                    color = CropConstants.getCropColor(cropName),
-                    icon = CropConstants.getCropIcon(cropName),
-                    reasoning = CropConstants.getReasoningForConfidence(cropName, confidence)
-                )
-            }
-        } catch (e: Exception) {
-            Log.e("CropRecommendation", "Error during model inference: ${e.message}", e)
-            getDefaultRecommendations()
+            CropPrediction(
+                cropName = cropName,
+                confidence = confidence.coerceIn(0f, 1f),
+                percentage = (confidence * 100).roundToInt().coerceIn(0, 100),
+                color = CropConstants.getCropColor(cropName),
+                icon = CropConstants.getCropIcon(cropName),
+                reasoning = CropConstants.getReasoningForConfidence(cropName, confidence)
+            )
         }
 
         // Sort by confidence (highest first)
         predictions.sortedByDescending { it.confidence }
+
     } catch (e: Exception) {
         Log.e("CropRecommendation", "Error in runOnnxInference: ${e.message}", e)
         getDefaultRecommendations()
