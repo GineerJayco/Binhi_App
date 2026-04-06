@@ -153,8 +153,18 @@ fun runOnnxInference(
             modelRunner.initializeEnvironment()
         }
 
+        Log.d("CropRecommendation", "=== Starting ONNX Inference ===")
+        Log.d("CropRecommendation", "Expected crop classes: ${CropConstants.CROP_NAMES}")
+
         // Execute inference
         val results = modelRunner.runInference(rawInputData)
+
+        Log.d("CropRecommendation", "Raw results keys: ${results.keys}")
+        Log.d("CropRecommendation", "Raw results size: ${results.size}")
+        results.forEach { (key, value) ->
+            Log.d("CropRecommendation", "Result[$key] type: ${value?.javaClass?.simpleName ?: "null"}")
+            Log.d("CropRecommendation", "Result[$key] value: $value")
+        }
 
         // Extract probability output
         val outputNames = modelRunner.getOutputNames()
@@ -163,22 +173,31 @@ fun runOnnxInference(
             return getDefaultRecommendations()
         }
 
+        Log.d("CropRecommendation", "Output names from model: $outputNames")
+
         // Get probability output (usually the second output)
         val probOutputName = outputNames.getOrNull(1) ?: outputNames.first()
         val probabilityOutput = results[probOutputName]
 
-        Log.d("CropRecommendation", "Probability output name: $probOutputName")
-        Log.d("CropRecommendation", "Output type: ${probabilityOutput?.javaClass?.simpleName ?: "null"}")
+        Log.d("CropRecommendation", "Using probability output: '$probOutputName'")
+        Log.d("CropRecommendation", "Probability output type: ${probabilityOutput?.javaClass?.simpleName ?: "null"}")
+        Log.d("CropRecommendation", "Probability output value: $probabilityOutput")
 
         // Extract confidence scores using the model runner utility
         val confidences = modelRunner.extractProbabilities(probabilityOutput, CropConstants.CROP_NAMES.size)
 
         if (confidences.isEmpty()) {
             Log.w("CropRecommendation", "No confidences extracted from model output")
+            Log.d("CropRecommendation", "Falling back to default recommendations")
             return getDefaultRecommendations()
         }
 
-        Log.d("CropRecommendation", "Extracted confidences: $confidences")
+        Log.d("CropRecommendation", "Extracted ${confidences.size} confidence scores")
+        Log.d("CropRecommendation", "Confidences: $confidences")
+
+        // Validate confidence sum (should be close to 1.0 for softmax)
+        val confidenceSum = confidences.sum()
+        Log.d("CropRecommendation", "Confidence sum: $confidenceSum (should be ~1.0)")
 
         // Create predictions from confidences
         val predictions = confidences.mapIndexed { index, confidence ->
@@ -199,10 +218,19 @@ fun runOnnxInference(
         }
 
         // Sort by confidence (highest first)
-        predictions.sortedByDescending { it.confidence }
+        val sortedPredictions = predictions.sortedByDescending { it.confidence }
+
+        Log.d("CropRecommendation", "=== Inference Results ===")
+        sortedPredictions.forEachIndexed { index, pred ->
+            Log.d("CropRecommendation", "[$index] ${pred.cropName}: ${pred.confidence} (${pred.percentage}%)")
+        }
+        Log.d("CropRecommendation", "=== Inference Complete ===")
+
+        sortedPredictions
 
     } catch (e: Exception) {
         Log.e("CropRecommendation", "Error in runOnnxInference: ${e.message}", e)
+        e.printStackTrace()
         getDefaultRecommendations()
     }
 }

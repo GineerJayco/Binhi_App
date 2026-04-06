@@ -80,6 +80,7 @@ class OnnxModelRunner(
             Log.d(TAG, "ONNX Runtime environment initialized")
 
             // Copy model from assets to internal storage
+            // This will automatically detect new models deployed (size checking)
             modelPath = copyAssetToInternalStorage(context, modelFileName)
             if (modelPath == null) {
                 throw IOException("Failed to copy model file from assets")
@@ -122,8 +123,46 @@ class OnnxModelRunner(
     }
 
     /**
+     * Force refresh the model from assets
+     * Useful when a new model is deployed (development/testing)
+     * Closes current session and reinitializes with fresh model copy
+     */
+    fun forceRefreshModel() {
+        Log.d(TAG, "Force refreshing model from assets...")
+        try {
+            // Close current session
+            session?.close()
+            session = null
+            isInitialized = false
+
+            // Delete cached model file to force re-copy
+            try {
+                val cachedFile = File(context.filesDir, modelFileName)
+                if (cachedFile.exists()) {
+                    val deleted = cachedFile.delete()
+                    Log.d(TAG, "Deleted cached model: $deleted")
+                } else {
+                    Log.d(TAG, "No cached model file found")
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Error deleting cached model: ${e.message}")
+            }
+
+            // Reinitialize with fresh model
+            initializeEnvironment()
+            Log.d(TAG, "Model refresh completed successfully")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error during model refresh: ${e.message}", e)
+            throw RuntimeException("Failed to refresh model", e)
+        }
+    }
+
+    /**
      * Copy model file from assets to internal storage
      * This is necessary because ONNX Runtime needs file path access
+     *
+     * IMPORTANT: Always checks file size to detect when model is updated
+     * This ensures new trained models are not cached
      */
     private fun copyAssetToInternalStorage(
         context: Context,
@@ -134,18 +173,36 @@ class OnnxModelRunner(
             val inputStream = assetManager.open(assetFileName)
             val outFile = File(context.filesDir, assetFileName)
 
-            // Skip copy if file already exists
+            // Get asset file size
+            val assetSize = inputStream.available().toLong()
+            Log.d(TAG, "Asset file size: $assetSize bytes")
+
+            // Check if file exists and compare sizes
             if (outFile.exists()) {
+                val existingSize = outFile.length()
                 Log.d(TAG, "Model file already exists: ${outFile.absolutePath}")
-                return outFile.absolutePath
+                Log.d(TAG, "Existing file size: $existingSize bytes, Asset size: $assetSize bytes")
+
+                // If sizes match, skip copy (same model)
+                if (existingSize == assetSize) {
+                    Log.d(TAG, "File sizes match - using existing model")
+                    return outFile.absolutePath
+                } else {
+                    // Size mismatch - this means a new model was deployed!
+                    Log.d(TAG, "File size mismatch detected! New model deployed.")
+                    Log.d(TAG, "Deleting old model and copying new one...")
+                    outFile.delete()
+                }
             }
 
             val outputStream = FileOutputStream(outFile)
-            val buffer = ByteArray(1024)
+            val buffer = ByteArray(8192) // Larger buffer for faster copy
             var bytesRead: Int
+            var totalBytes = 0L
 
             while (inputStream.read(buffer).also { bytesRead = it } != -1) {
                 outputStream.write(buffer, 0, bytesRead)
+                totalBytes += bytesRead
             }
 
             inputStream.close()
@@ -157,7 +214,8 @@ class OnnxModelRunner(
                 return null
             }
 
-            Log.d(TAG, "Model copied successfully to: ${outFile.absolutePath}")
+            Log.d(TAG, "Model copied successfully: ${outFile.absolutePath}")
+            Log.d(TAG, "Copied $totalBytes bytes total")
             outFile.absolutePath
 
         } catch (e: IOException) {
