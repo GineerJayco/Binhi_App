@@ -52,6 +52,12 @@ class SoilDataViewModel(
     var tempPolygonRotation by mutableStateOf(0f)
 
     /**
+     * Store the currently loaded session
+     * Used to retrieve landArea, length, width in downstream screens
+     */
+    var currentLoadedSession by mutableStateOf<SavedSession?>(null)
+
+    /**
      * Derived state that checks if all dots have saved soil data
      * Returns true only when:
      * - totalDotsCount > 0
@@ -248,6 +254,8 @@ class SoilDataViewModel(
 
         soilDataStorage = restoredData
         totalDotsCount = session.totalDots
+        currentLoadedSession = session  // Store the loaded session for downstream use
+        Log.d("SoilDataViewModel", "✓ Session loaded: ${session.sessionName}, landArea=${session.landArea}, length=${session.length}, width=${session.width}")
     }
 
     /**

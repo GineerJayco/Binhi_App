@@ -138,6 +138,24 @@ class MainUI : ComponentActivity() {
                         )
                     }
                     composable(
+                        route = "visualizeCR/{crop}/{landArea}/{length}/{width}",
+                        arguments = listOf(
+                            navArgument("crop") { type = NavType.StringType },
+                            navArgument("landArea") { type = NavType.StringType },
+                            navArgument("length") { type = NavType.StringType },
+                            navArgument("width") { type = NavType.StringType }
+                        )
+                    ) { backStackEntry ->
+                        VisualizeCR(
+                            navController = navController,
+                            recommendedCrop = backStackEntry.arguments?.getString("crop"),
+                            landArea = backStackEntry.arguments?.getString("landArea"),
+                            length = backStackEntry.arguments?.getString("length"),
+                            width = backStackEntry.arguments?.getString("width"),
+                            isDarkModeState = isDarkMode
+                        )
+                    }
+                    composable(
                         route = "get_soil_data/{landArea}/{length}/{width}/{crop}",
                         arguments = listOf(
                             navArgument("landArea") { type = NavType.StringType },

@@ -12,6 +12,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.MutableState
@@ -297,7 +298,11 @@ fun CropRecommendationScreen(
     avgPotassium: Float? = null,
     avgPhLevel: Float? = null,
     avgMoisture: Float? = null,
-    avgTemperature: Float? = null
+    avgTemperature: Float? = null,
+    landArea: String? = null,
+    length: String? = null,
+    width: String? = null,
+    isDarkModeState: MutableState<Boolean> = mutableStateOf(false),
 ) {
     val context = LocalContext.current
     var currentStep by remember {
@@ -307,6 +312,14 @@ fun CropRecommendationScreen(
     var error by remember { mutableStateOf<String?>(null) }
     var showErrorDialog by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
+
+    // Extract session data from ViewModel if available
+    val loadedSession = soilDataViewModel.currentLoadedSession
+    val effectiveLandArea = landArea ?: loadedSession?.landArea?.toString() ?: "0"
+    val effectiveLength = length ?: loadedSession?.length?.toString() ?: "0"
+    val effectiveWidth = width ?: loadedSession?.width?.toString() ?: "0"
+
+    Log.d("CropRecommendation", "Session data - landArea=$effectiveLandArea, length=$effectiveLength, width=$effectiveWidth")
 
     // Step 1: Start Screen (skipped if parameters provided)
     if (currentStep == CropRecommendationStep.START && !skipStartScreen) {
@@ -426,7 +439,14 @@ fun CropRecommendationScreen(
                 }
                 CropRecommendationStep.RESULTS -> {
                     if (predictions.isNotEmpty()) {
-                        ResultsScreen(predictions = predictions)
+                        ResultsScreen(
+                            predictions = predictions,
+                            navController = navController,
+                            landArea = effectiveLandArea,
+                            length = effectiveLength,
+                            width = effectiveWidth,
+                            isDarkModeState = isDarkModeState
+                        )
                     } else {
                         EmptyScreen()
                     }
@@ -566,7 +586,14 @@ fun EmptyScreen() {
  * Results Screen Composable - Shows all crop recommendations
  */
 @Composable
-fun ResultsScreen(predictions: List<CropPrediction>) {
+fun ResultsScreen(
+    predictions: List<CropPrediction>,
+    navController: NavController,
+    landArea: String? = null,
+    length: String? = null,
+    width: String? = null,
+    isDarkModeState: MutableState<Boolean> = mutableStateOf(false),
+) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -622,6 +649,36 @@ fun ResultsScreen(predictions: List<CropPrediction>) {
                             color = Color.Gray,
                             textAlign = TextAlign.Center
                         )
+
+                        // Visualize Button for Top Recommendation
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Button(
+                            onClick = {
+                                navController.navigate(
+                                    "visualizeCR/${topCrop.cropName}/${landArea ?: "0"}/${length ?: "0"}/${width ?: "0"}"
+                                )
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth(0.8f)
+                                .height(44.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF4CAF50)
+                            ),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Visibility,
+                                contentDescription = "Visualize",
+                                modifier = Modifier
+                                    .size(18.dp)
+                                    .padding(end = 8.dp)
+                            )
+                            Text(
+                                "Visualize",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp
+                            )
+                        }
                     }
 
                     // Summary Stats Row
@@ -824,7 +881,11 @@ fun CropRecommendation(
     avgPotassium: Float? = null,
     avgPhLevel: Float? = null,
     avgMoisture: Float? = null,
-    avgTemperature: Float? = null
+    avgTemperature: Float? = null,
+    landArea: String? = null,
+    length: String? = null,
+    width: String? = null,
+    isDarkModeState: MutableState<Boolean> = mutableStateOf(false),
 ) {
     CropRecommendationScreen(
         navController = navController,
@@ -835,7 +896,11 @@ fun CropRecommendation(
         avgPotassium = avgPotassium,
         avgPhLevel = avgPhLevel,
         avgMoisture = avgMoisture,
-        avgTemperature = avgTemperature
+        avgTemperature = avgTemperature,
+        landArea = landArea,
+        length = length,
+        width = width,
+        isDarkModeState = isDarkModeState
     )
 }
 
