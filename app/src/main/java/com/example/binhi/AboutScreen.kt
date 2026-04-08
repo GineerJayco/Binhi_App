@@ -98,7 +98,7 @@ fun AboutScreen(navController: NavController, modifier: Modifier = Modifier, isD
         CropInfo(
             name = "Coconut",
             description = "A tropical tree crop valued for its coconuts and coconut products. Coconuts are highly adaptable to sandy and well-drained soils. The tree produces coconuts year-round and can live for 60-80 years. Used for food, oil, fiber, and various industrial applications. Rich in minerals and provides multiple products from a single tree.",
-            imageUrl = "https://media3.giphy.com/media/v1.Y2lkPTc5MGI3NjExYW5haTVhOWp6ZTZ4YTl1dGNzeHUwc2I2bnE3djF4cDJicHFvYncxMyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9cw/Qw1FB7s3le3hv5pc8E/giphy.gif",
+            drawableId = R.drawable.coconut,
             nitrogen = "70-100 kg/ha",
             phosphorus = "40-70 kg/ha",
             potassium = "100-150 kg/ha",
