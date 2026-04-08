@@ -29,7 +29,7 @@ object CropData {
         "Sweet Potato" to CropPlanting("Sweet Potato", 0.5, 1.0, 0.5, 1.0, R.drawable.ic_sweet_potato),
         // Banana: 5m x 5m (rowSpacing x columnSpacing)
         "Banana" to CropPlanting("Banana", 25.0, 5.0, 5.0, 5.0, R.drawable.ic_banana),
-        // Mango: 10m x 10m (rowSpacing x columnSpacing)
-        "Mango" to CropPlanting("Mango", 100.0, 10.0, 10.0, 10.0, R.drawable.ic_mango)
+        // Coconut: 10m x 10m (rowSpacing x columnSpacing)
+        "Coconut" to CropPlanting("Coconut", 100.0, 10.0, 10.0, 10.0, R.drawable.ic_coconut)
     )
 }

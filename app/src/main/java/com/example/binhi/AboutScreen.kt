@@ -96,17 +96,17 @@ fun AboutScreen(navController: NavController, modifier: Modifier = Modifier, isD
             color = Color(0xFFFFA500)
         ),
         CropInfo(
-            name = "Mango",
-            description = "A tropical fruit crop known as the 'king of fruits'. Mangoes are highly valued for their sweet, juicy fruits and are grown extensively in tropical regions. The tree is long-lived and can produce for decades. Requires a dry season for flowering. Rich in vitamins C and A, and contains various antioxidants.",
+            name = "Coconut",
+            description = "A tropical tree crop valued for its coconuts and coconut products. Coconuts are highly adaptable to sandy and well-drained soils. The tree produces coconuts year-round and can live for 60-80 years. Used for food, oil, fiber, and various industrial applications. Rich in minerals and provides multiple products from a single tree.",
             imageUrl = "https://media3.giphy.com/media/v1.Y2lkPTc5MGI3NjExYW5haTVhOWp6ZTZ4YTl1dGNzeHUwc2I2bnE3djF4cDJicHFvYncxMyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9cw/Qw1FB7s3le3hv5pc8E/giphy.gif",
-            nitrogen = "80-120 kg/ha",
-            phosphorus = "50-80 kg/ha",
+            nitrogen = "70-100 kg/ha",
+            phosphorus = "40-70 kg/ha",
             potassium = "100-150 kg/ha",
-            phLevel = "5.5-7.5",
-            temperature = "24-30°C",
-            moisture = "Low to Moderate (600-1000mm annual)",
-            plantingDistance = "10m × 10m or 12m × 8m (for spacing mature trees)",
-            color = Color(0xFFFFB347)
+            phLevel = "5.0-8.0",
+            temperature = "24-32°C",
+            moisture = "Moderate to High (1500-2250mm annual)",
+            plantingDistance = "10m × 10m or 9m × 9m (for spacing mature trees)",
+            color = Color(0xFF8B4513)
         )
     )
 

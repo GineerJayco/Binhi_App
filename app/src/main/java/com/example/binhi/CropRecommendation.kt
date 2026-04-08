@@ -54,12 +54,12 @@ data class CropPrediction(
 // Object for crop-related constants and utility functions
 object CropConstants {
     // IMPORTANT: Order MUST match LabelEncoder.classes_ from mango_mock_data.py
-    // LabelEncoder uses alphabetical order: Banana, Cassava, Corn, Mango, Sweet Potato
+    // LabelEncoder uses alphabetical order: Banana, Cassava, Corn, Coconut, Sweet Potato
     val CROP_NAMES = listOf(
         "Banana",           // Index 0 - Model output[0]
         "Cassava",          // Index 1 - Model output[1]
         "Corn",             // Index 2 - Model output[2]
-        "Mango",            // Index 3 - Model output[3]
+        "Coconut",          // Index 3 - Model output[3]
         "Sweet Potato"      // Index 4 - Model output[4]
     )
 
@@ -69,7 +69,7 @@ object CropConstants {
         "Cassava" to Color(0xFFD2B48C),     // Tan
         "Sweet Potato" to Color(0xFFFF8C69),// Salmon
         "Corn" to Color(0xFFFFD700),        // Gold
-        "Mango" to Color(0xFFFF6347)        // Tomato
+        "Coconut" to Color(0xFF8B4513)      // Saddle Brown
     )
 
     // Map crop names to their icons (you can add actual drawable references)
@@ -78,7 +78,7 @@ object CropConstants {
         "Cassava" to "🌳",
         "Sweet Potato" to "🥔",
         "Corn" to "🌽",
-        "Mango" to "🥭"
+        "Coconut" to "🥥"
     )
 
     fun getCropColor(cropName: String): Color {
@@ -274,11 +274,11 @@ fun getDefaultRecommendations(): List<CropPrediction> {
             reasoning = "Good temperature adaptability"
         ),
         CropPrediction(
-            cropName = "Mango",
+            cropName = "Coconut",
             confidence = 0.55f,
             percentage = 55,
-            color = Color(0xFFFF6347),
-            icon = "🥭",
+            color = Color(0xFF8B4513),
+            icon = "🥥",
             reasoning = "Well-drained soil preference"
         )
     )

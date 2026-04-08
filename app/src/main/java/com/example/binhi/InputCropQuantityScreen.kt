@@ -25,7 +25,7 @@ fun InputCropQuantityScreen(navController: NavController) {
     var cropQuantity by remember { mutableStateOf("") }
     var selectedCrop by remember { mutableStateOf("") }
     var expanded by remember { mutableStateOf(false) }
-    val crops = listOf("Banana", "Cassava", "Sweet Potato", "Mango", "Corn")
+    val crops = listOf("Banana", "Cassava", "Sweet Potato", "Coconut", "Corn")
 
     Scaffold(
         topBar = {

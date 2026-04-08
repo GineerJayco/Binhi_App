@@ -64,7 +64,7 @@ fun InputLandAreaScreen(navController: NavController) {
     var width by remember { mutableStateOf("") }
     var selectedCrop by remember { mutableStateOf("") }
     var expanded by remember { mutableStateOf(false) }
-    val crops = listOf("Banana", "Cassava", "Sweet Potato", "Mango", "Corn")
+    val crops = listOf("Banana", "Cassava", "Sweet Potato", "Coconut", "Corn")
     var isAreaSet by remember { mutableStateOf(false) }
     var showConversionTool by remember { mutableStateOf(false) }
     val decimalFormat = DecimalFormat("0.00")
