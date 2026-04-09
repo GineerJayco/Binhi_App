@@ -23,6 +23,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.MutableState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -203,6 +204,7 @@ private fun MapContentCR(
                     state = markerState,
                     title = "${crop ?: "Crop"} ${index + 1}",
                     icon = icon,
+                    anchor = androidx.compose.ui.geometry.Offset(0.5f, 0.5f),  // Center the marker at the exact position
                     rotation = -cameraPositionState.position.bearing,
                     onClick = {
                         onMarkerClick(position)
