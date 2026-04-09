@@ -23,6 +23,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.MutableState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -55,6 +56,21 @@ fun isPointInsidePolygon(point: LatLng, polygon: List<LatLng>): Boolean {
         j = i
     }
     return inside
+}
+
+/**
+ * Get the scale factor for crop icons based on crop type.
+ * Different crops can have different icon sizes.
+ *
+ * Group 1 (Small icons): corn, sweet potato, cassava - scale factor 0.3
+ * Group 2 (Large icons): banan, coconut - scale factor 0.5
+ */
+private fun getIconScaleFactor(cropType: String): Float {
+    return when (cropType.lowercase()) {
+        "corn", "sweet potato", "cassava" -> 0.3f      // Smaller size
+        "banana", "coconut" -> 0.6f                      // Larger size
+        else -> 0.4f                                     // Default size for other crops
+    }
 }
 
 private fun calculateCropPositions(
@@ -384,8 +400,8 @@ fun VisualizeCQ(
                         val icon = crop?.let { cropType ->
                             CropData.crops[cropType]?.let { cropData ->
                                 val drawable = ContextCompat.getDrawable(context, cropData.iconResource)!!
-                                // Scale down icons to 60% of original size
-                                val scaleFactor = 0.4
+                                // Get crop-specific scale factor
+                                val scaleFactor = getIconScaleFactor(cropType)
                                 val scaledWidth = (drawable.intrinsicWidth * scaleFactor).toInt()
                                 val scaledHeight = (drawable.intrinsicHeight * scaleFactor).toInt()
                                 drawable.setBounds(0, 0, scaledWidth, scaledHeight)
@@ -404,6 +420,7 @@ fun VisualizeCQ(
                             state = markerState,
                             title = "${crop ?: "Crop"} ${index + 1}",
                             icon = icon,
+                            anchor = androidx.compose.ui.geometry.Offset(0.5f, 0.5f),  // Center the marker at the exact position
                             rotation = -cameraPositionState.position.bearing,
                             onClick = {
                                 selectedMarkerPosition = position
