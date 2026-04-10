@@ -7,13 +7,15 @@ import android.graphics.Canvas
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.*
@@ -23,7 +25,6 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.MutableState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -71,6 +72,48 @@ private fun getIconScaleFactor(cropType: String): Float {
         "banana", "coconut" -> 0.6f                      // Larger size
         else -> 0.4f                                     // Default size for other crops
     }
+}
+
+/**
+ * Create and cache crop icon descriptors to avoid repeated bitmap generation.
+ * Uses a mutable map to store generated bitmaps keyed by crop type.
+ */
+private val iconCache = mutableMapOf<String, BitmapDescriptor>()
+
+/**
+ * Get or create a BitmapDescriptor for a crop type with proper scaling.
+ * Results are cached to avoid repeated drawable scaling and bitmap creation.
+ */
+private fun getCropIcon(
+    context: android.content.Context,
+    cropType: String
+): BitmapDescriptor {
+    // Check cache first
+    val cacheKey = cropType.lowercase()
+    if (iconCache.containsKey(cacheKey)) {
+        return iconCache[cacheKey]!!
+    }
+
+    // Create new icon if not cached
+    val icon = CropData.crops[cropType]?.let { cropData ->
+        val drawable = ContextCompat.getDrawable(context, cropData.iconResource)!!
+        val scaleFactor = getIconScaleFactor(cropType)
+        val scaledWidth = (drawable.intrinsicWidth * scaleFactor).toInt()
+        val scaledHeight = (drawable.intrinsicHeight * scaleFactor).toInt()
+        drawable.setBounds(0, 0, scaledWidth, scaledHeight)
+        val bitmap = createBitmap(
+            width = scaledWidth,
+            height = scaledHeight,
+            config = Bitmap.Config.ARGB_8888
+        )
+        val canvas = Canvas(bitmap)
+        drawable.draw(canvas)
+        BitmapDescriptorFactory.fromBitmap(bitmap)
+    } ?: BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN)
+
+    // Store in cache
+    iconCache[cacheKey] = icon
+    return icon
 }
 
 private fun calculateCropPositions(
@@ -139,9 +182,6 @@ private fun transformCropPositions(
     return baselineCropPositions.map { position ->
         // Convert lat/lng to meters relative to old center
         val oldCenterLatRad = Math.toRadians(oldCenter.latitude)
-        val posLatRad = Math.toRadians(position.latitude)
-        val posLngRad = Math.toRadians(position.longitude)
-        val oldCenterLngRad = Math.toRadians(oldCenter.longitude)
 
         // Calculate relative position in meters
         val deltaLat = (position.latitude - oldCenter.latitude) * 111132.0
@@ -257,17 +297,39 @@ fun VisualizeCQ(
     var showCropNavigator by remember { mutableStateOf(false) }
     var currentCropIndex by remember { mutableStateOf(0) }
 
-    // Animate radar when crop is selected
+    // Use Animatable for radar effect animation
+    val radarScaleAnimatable = remember { Animatable(1f) }
+    val radarAlphaAnimatable = remember { Animatable(1f) }
+
     LaunchedEffect(selectedMarkerPosition) {
-        while (selectedMarkerPosition != null) {
-            for (i in 0..100) {
-                val progress = i / 100f
-                radarScale = 1f + (progress * 2f)
-                radarAlpha = 1f - progress
-                kotlinx.coroutines.delay(20)
+        if (selectedMarkerPosition != null) {
+            // Start animation when marker is selected
+            try {
+                radarScaleAnimatable.animateTo(
+                    targetValue = 3f,
+                    animationSpec = tween(durationMillis = 2000, easing = LinearEasing)
+                )
+            } catch (e: Exception) {
+                Log.e("VisualizeCQ", "Animation error: ${e.message}")
             }
+
+            try {
+                radarAlphaAnimatable.animateTo(
+                    targetValue = 0f,
+                    animationSpec = tween(durationMillis = 2000, easing = LinearEasing)
+                )
+            } catch (e: Exception) {
+                Log.e("VisualizeCQ", "Animation error: ${e.message}")
+            }
+        } else {
+            // Reset animation when marker is deselected
+            radarScaleAnimatable.snapTo(1f)
+            radarAlphaAnimatable.snapTo(1f)
         }
     }
+
+    radarScale = radarScaleAnimatable.value
+    radarAlpha = radarAlphaAnimatable.value
 
     Box(
         modifier = Modifier
@@ -395,39 +457,27 @@ fun VisualizeCQ(
                         }
                     }
 
-                    transformedCropPositions.forEachIndexed { index, position ->
-                        val markerState = rememberMarkerState(position = position)
-                        val icon = crop?.let { cropType ->
-                            CropData.crops[cropType]?.let { cropData ->
-                                val drawable = ContextCompat.getDrawable(context, cropData.iconResource)!!
-                                // Get crop-specific scale factor
-                                val scaleFactor = getIconScaleFactor(cropType)
-                                val scaledWidth = (drawable.intrinsicWidth * scaleFactor).toInt()
-                                val scaledHeight = (drawable.intrinsicHeight * scaleFactor).toInt()
-                                drawable.setBounds(0, 0, scaledWidth, scaledHeight)
-                                val bitmap = createBitmap(
-                                    width = scaledWidth,
-                                    height = scaledHeight,
-                                    config = Bitmap.Config.ARGB_8888
-                                )
-                                val canvas = Canvas(bitmap)
-                                drawable.draw(canvas)
-                                BitmapDescriptorFactory.fromBitmap(bitmap)
-                            }
-                        } ?: BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN)
+                    // Cache the crop icon to avoid recreating it for each marker
+                    val cachedIcon = crop?.let { getCropIcon(context, it) }
+                        ?: BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN)
 
-                        Marker(
-                            state = markerState,
-                            title = "${crop ?: "Crop"} ${index + 1}",
-                            icon = icon,
-                            anchor = androidx.compose.ui.geometry.Offset(0.5f, 0.5f),  // Center the marker at the exact position
-                            rotation = -cameraPositionState.position.bearing,
-                            onClick = {
-                                selectedMarkerPosition = position
-                                showMarkerDialog = true
-                                true
-                            }
-                        )
+                    transformedCropPositions.forEachIndexed { index, position ->
+                        key(index, position) {  // Use key for each marker to prevent unnecessary recompositions
+                            val markerState = rememberMarkerState(position = position)
+
+                            Marker(
+                                state = markerState,
+                                title = "${crop ?: "Crop"} ${index + 1}",
+                                icon = cachedIcon,  // Use cached icon instead of recreating
+                                anchor = androidx.compose.ui.geometry.Offset(0.5f, 0.5f),  // Center the marker at the exact position
+                                rotation = -cameraPositionState.position.bearing,
+                                onClick = {
+                                    selectedMarkerPosition = position
+                                    showMarkerDialog = true
+                                    true
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -443,13 +493,13 @@ fun VisualizeCQ(
                     strokeWidth = 1f
                 )
 
-                // Small inner circle
+                // Small inner circle - only render if radarAlpha is high enough to be visible
                 Circle(
-                    center = selectedMarkerPosition!!,
-                    radius = 0.2,
-                    fillColor = Color.Blue,
-                    strokeColor = Color.White,
-                    strokeWidth = 0.5f
+                        center = selectedMarkerPosition!!,
+                        radius = 0.3,
+                        fillColor = Color.Blue,
+                        strokeColor = Color.White,
+                        strokeWidth = 0.5f
                 )
             }
         }
@@ -512,7 +562,7 @@ fun VisualizeCQ(
                 .padding(top = 72.dp),
             containerColor = Color.White
         ) {
-            Icon(Icons.Default.List, contentDescription = "View Crop Locations")
+            Icon(Icons.AutoMirrored.Filled.List, contentDescription = "View Crop Locations")
         }
 
         Column(
@@ -685,7 +735,7 @@ fun VisualizeCQ(
                         }
 
                         // Divider
-                        Divider(
+                        HorizontalDivider(
                             color = if (isDarkMode) Color(0xFF404040) else Color(0xFFE0E0E0),
                             modifier = Modifier.padding(vertical = 12.dp)
                         )
