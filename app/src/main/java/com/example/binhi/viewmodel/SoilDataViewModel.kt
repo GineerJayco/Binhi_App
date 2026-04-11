@@ -366,5 +366,33 @@ class SoilDataViewModel(
         tempPolygonCenter = null
         tempPolygonRotation = 0f
     }
+
+    /**
+     * Update an existing saved session in the database
+     * @param session The updated session to save
+     */
+    fun updateSavedSession(session: SavedSession) {
+        if (sessionRepository == null) {
+            Log.w("SoilDataViewModel", "SessionRepository not initialized, cannot update session")
+            return
+        }
+
+        viewModelScope.launch {
+            try {
+                val success = sessionRepository.updateSession(session)
+                if (success) {
+                    // Update the in-memory list
+                    savedSessions = savedSessions.map { s ->
+                        if (s.id == session.id) session else s
+                    }
+                    Log.d("SoilDataViewModel", "✓ Session updated in database: ${session.id}")
+                } else {
+                    Log.e("SoilDataViewModel", "Failed to update session in database")
+                }
+            } catch (e: Exception) {
+                Log.e("SoilDataViewModel", "Error updating session: ${e.message}", e)
+            }
+        }
+    }
 }
 
