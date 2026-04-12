@@ -131,6 +131,20 @@ fun GetSoilData(
     var isSavingSession by remember { mutableStateOf(false) }
     var sessionSaveSuccess by remember { mutableStateOf(false) }
 
+    // Direction state
+    var directionActive by remember { mutableStateOf(false) }
+    var directionStart by remember { mutableStateOf<LatLng?>(null) }
+    var directionEnd by remember { mutableStateOf<LatLng?>(null) }
+    var userCurrentLocation by remember { mutableStateOf<LatLng?>(null) }
+    var showDirectionButton by remember { mutableStateOf(true) }
+
+    // Direction dialog state
+    var showDirectionDialog by remember { mutableStateOf(false) }
+    var directionDialogStart by remember { mutableStateOf<LatLng?>(null) }
+    var directionDialogEnd by remember { mutableStateOf<LatLng?>(null) }
+    var showStartPointOptions by remember { mutableStateOf(false) }
+    var showEndPointSelection by remember { mutableStateOf(false) }
+
     // Calculate dots based on area with fixed minimum spacing
     val area = landArea?.toDoubleOrNull() ?: 0.0
     val minimumSpacing = 5.0 // minimum 5 meters between dots
@@ -237,6 +251,7 @@ fun GetSoilData(
                         val result = LatLng(task.result.latitude, task.result.longitude)
                         cameraPositionState.position = CameraPosition.fromLatLngZoom(result, 15f)
                         polygonCenter = result
+                        userCurrentLocation = result
                         Log.d("GetSoilData", "✓ Location auto-fetched: $result")
                     } else {
                         Log.w("GetSoilData", "Failed to auto-fetch location, using default")
@@ -262,6 +277,7 @@ fun GetSoilData(
                                 val result = LatLng(it.result.latitude, it.result.longitude)
                                 cameraPositionState.position = CameraPosition.fromLatLngZoom(result, 15f)
                                 polygonCenter = result
+                                userCurrentLocation = result
                             } else {
                                 Log.e("VisualizeLA", "Failed to get location")
                             }
@@ -745,6 +761,364 @@ fun GetSoilData(
         }
     }
 
+    // Direction Setup Dialog
+    if (showDirectionDialog) {
+        Dialog(
+            onDismissRequest = { showDirectionDialog = false }
+        ) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth(0.95f)
+                    .padding(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = Color.White
+                )
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Text(
+                        text = "Direction Guide Setup",
+                        style = MaterialTheme.typography.titleLarge
+                    )
+
+                    Divider()
+
+                    // Start Point Selection
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                if (directionDialogStart != null) Color(0xFFC8E6C9) else Color(0xFFF5F5F5),
+                                shape = RoundedCornerShape(8.dp)
+                            ),
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (directionDialogStart != null) Color(0xFFC8E6C9) else Color(0xFFF5F5F5)
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Starting Point",
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                                Icon(
+                                    imageVector = Icons.Default.CheckCircle,
+                                    contentDescription = "Selected",
+                                    tint = if (directionDialogStart != null) Color.Green else Color.Gray,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+
+                            if (directionDialogStart != null) {
+                                Text(
+                                    text = "Lat: ${String.format("%.6f", directionDialogStart!!.latitude)}\nLon: ${String.format("%.6f", directionDialogStart!!.longitude)}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.DarkGray
+                                )
+                            } else {
+                                Text(
+                                    text = "No start point selected",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.Gray
+                                )
+                            }
+
+                            Button(
+                                onClick = { showStartPointOptions = true },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF4CAF50)
+                                )
+                            ) {
+                                Text("Select Starting Point")
+                            }
+                        }
+                    }
+
+                    // End Point Selection
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                if (directionDialogEnd != null) Color(0xFFBBDEFB) else Color(0xFFF5F5F5),
+                                shape = RoundedCornerShape(8.dp)
+                            ),
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (directionDialogEnd != null) Color(0xFFBBDEFB) else Color(0xFFF5F5F5)
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Destination Point",
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                                Icon(
+                                    imageVector = Icons.Default.CheckCircle,
+                                    contentDescription = "Selected",
+                                    tint = if (directionDialogEnd != null) Color.Blue else Color.Gray,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+
+                            if (directionDialogEnd != null) {
+                                Text(
+                                    text = "Lat: ${String.format("%.6f", directionDialogEnd!!.latitude)}\nLon: ${String.format("%.6f", directionDialogEnd!!.longitude)}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.DarkGray
+                                )
+                            } else {
+                                Text(
+                                    text = "No destination selected",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.Gray
+                                )
+                            }
+
+                            Button(
+                                onClick = { showEndPointSelection = true },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF2196F3)
+                                )
+                            ) {
+                                Text("Select Destination")
+                            }
+                        }
+                    }
+
+                    Divider()
+
+                    // Action Buttons
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                showDirectionDialog = false
+                                directionDialogStart = null
+                                directionDialogEnd = null
+                            },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(44.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color.Gray
+                            )
+                        ) {
+                            Text("Cancel")
+                        }
+
+                        Button(
+                            onClick = {
+                                if (directionDialogStart != null && directionDialogEnd != null) {
+                                    directionStart = directionDialogStart
+                                    directionEnd = directionDialogEnd
+                                    directionActive = true
+                                    showDirectionDialog = false
+                                    directionDialogStart = null
+                                    directionDialogEnd = null
+                                }
+                            },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(44.dp),
+                            enabled = directionDialogStart != null && directionDialogEnd != null,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF2196F3)
+                            )
+                        ) {
+                            Text("Start")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Start Point Options Dialog
+    if (showStartPointOptions) {
+        Dialog(
+            onDismissRequest = { showStartPointOptions = false }
+        ) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth(0.95f)
+                    .padding(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = Color.White
+                )
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "Select Starting Point",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+
+                    Divider(modifier = Modifier.padding(vertical = 8.dp))
+
+                    Button(
+                        onClick = {
+                            if (userCurrentLocation != null) {
+                                directionDialogStart = userCurrentLocation
+                                showStartPointOptions = false
+                                Log.d("Direction", "✓ Current location selected as start point")
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                        enabled = userCurrentLocation != null,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF4CAF50)
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.MyLocation,
+                            contentDescription = "Current Location",
+                            modifier = Modifier.size(20.dp),
+                            tint = Color.White
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (userCurrentLocation != null) "Use Current Location" else "No Location Available",
+                            color = Color.White
+                        )
+                    }
+
+                    if (userCurrentLocation == null) {
+                        Text(
+                            text = "Enable location permissions to use current location",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.Gray
+                        )
+                    }
+
+                    Button(
+                        onClick = { showStartPointOptions = false },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(44.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color.Gray
+                        )
+                    ) {
+                        Text("Cancel")
+                    }
+                }
+            }
+        }
+    }
+
+    // End Point Selection Dialog
+    if (showEndPointSelection) {
+        Dialog(
+            onDismissRequest = { showEndPointSelection = false }
+        ) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth(0.95f)
+                    .padding(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = Color.White
+                )
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "Select Destination Point",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+
+                    Text(
+                        text = "Total sampling points: ${dots.size}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.Gray
+                    )
+
+                    Divider(modifier = Modifier.padding(vertical = 8.dp))
+
+                    if (dots.isEmpty()) {
+                        Text(
+                            text = "No sampling points available",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.Gray
+                        )
+                    } else {
+                        dots.forEachIndexed { index, dot ->
+                            Button(
+                                onClick = {
+                                    directionDialogEnd = dot
+                                    showEndPointSelection = false
+                                    Log.d("Direction", "✓ Destination point ${index + 1} selected")
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(48.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF2196F3)
+                                )
+                            ) {
+                                Text(
+                                    text = "Point ${index + 1} - Lat: ${String.format("%.4f", dot.latitude)}, Lon: ${String.format("%.4f", dot.longitude)}",
+                                    color = Color.White,
+                                    fontSize = 11.sp
+                                )
+                            }
+                        }
+                    }
+
+                    Button(
+                        onClick = { showEndPointSelection = false },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(44.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color.Gray
+                        )
+                    ) {
+                        Text("Cancel")
+                    }
+                }
+            }
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -842,6 +1216,14 @@ fun GetSoilData(
                 )
             }
 
+            // Draw direction polyline if active
+            if (directionActive && directionStart != null && directionEnd != null) {
+                DirectionPolyline(
+                    startPoint = directionStart!!,
+                    endPoint = directionEnd!!
+                )
+            }
+
             // Draw all dots with click handling
             dots.forEach { dot ->
                 val markerColor = if (soilDataViewModel.hasSoilData(dot)) {
@@ -900,6 +1282,7 @@ fun GetSoilData(
                                     val result = LatLng(it.result.latitude, it.result.longitude)
                                     cameraPositionState.position = CameraPosition.fromLatLngZoom(result, 15f)
                                     polygonCenter = result
+                                    userCurrentLocation = result
                                 } else {
                                     Log.e("VisualizeLA", "Failed to get location")
                                 }
@@ -910,7 +1293,7 @@ fun GetSoilData(
                     }
                 }
             },
-            modifier = Modifier.padding(25.dp).align(Alignment.TopEnd),
+            modifier = Modifier.padding(15.dp).align(Alignment.TopEnd),
             containerColor = Color.White
         ) {
             Icon(Icons.Default.MyLocation, contentDescription = "Current Location")
@@ -923,7 +1306,7 @@ fun GetSoilData(
                 showSaveSessionDialog = true
             },
             modifier = Modifier
-                .padding(top = 95.dp, end = 25.dp)
+                .padding(top = 80.dp, end = 15.dp)
                 .align(Alignment.TopEnd),
             containerColor = Color(0xFFFF9800)
         ) {
@@ -931,6 +1314,25 @@ fun GetSoilData(
                 imageVector = Icons.Default.Save,
                 contentDescription = "Save Data",
                 tint = Color.White
+            )
+        }
+
+        // Direction button (top right, below Save Data button)
+        FloatingActionButton(
+            onClick = {
+                Log.d("GetSoilData", "Direction Guide clicked")
+                showDirectionDialog = true
+            },
+            modifier = Modifier
+                .padding(top = 145.dp, end = 15.dp)
+                .align(Alignment.TopEnd),
+            containerColor = if (directionActive) Color(0xFF2196F3) else Color(0xFF4CAF50)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Navigation,
+                contentDescription = "Direction Guide",
+                tint = Color.White,
+                modifier = Modifier.size(28.dp)
             )
         }
 
@@ -1002,6 +1404,23 @@ fun GetSoilData(
         val isButtonEnabled = soilDataViewModel.allDotsComplete
         val savedDotsCount = soilDataViewModel.getStoredDataCount()
         val totalDots = soilDataViewModel.totalDotsCount
+
+        // Direction Controls
+        DirectionControls(
+            currentUserLocation = userCurrentLocation,
+            availableDots = dots,
+            onDirectionCleared = {
+                directionStart = null
+                directionEnd = null
+                directionActive = false
+            },
+            isDirectionActive = directionActive,
+            directionStart = directionStart,
+            directionEnd = directionEnd,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 95.dp, start = 16.dp, end = 16.dp)
+        )
 
         Button(
             onClick = {
