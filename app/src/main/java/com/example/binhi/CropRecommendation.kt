@@ -14,6 +14,8 @@ import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.*
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
 import androidx.compose.runtime.*
 import androidx.compose.runtime.MutableState
 import androidx.compose.ui.Alignment
@@ -48,7 +50,8 @@ data class CropPrediction(
     val percentage: Int,
     val color: Color,
     val icon: String,
-    val reasoning: String
+    val reasoning: String,
+    val iconResId: Int? = null  // Optional drawable resource ID
 )
 
 // Object for crop-related constants and utility functions
@@ -75,10 +78,15 @@ object CropConstants {
     // Map crop names to their icons (you can add actual drawable references)
     val CROP_ICONS = mapOf(
         "Banana" to "🍌",
-        "Cassava" to "🌳",
+        "Cassava" to "",  // Using drawable resource instead
         "Sweet Potato" to "🥔",
         "Corn" to "🌽",
         "Coconut" to "🥥"
+    )
+
+    // Map crop names to drawable resources
+    val CROP_DRAWABLES = mapOf(
+        "Cassava" to R.drawable.cassava
     )
 
     fun getCropColor(cropName: String): Color {
@@ -87,6 +95,10 @@ object CropConstants {
 
     fun getCropIcon(cropName: String): String {
         return CROP_ICONS[cropName] ?: "🌾"
+    }
+
+    fun getCropDrawable(cropName: String): Int? {
+        return CROP_DRAWABLES[cropName]
     }
 
     fun getReasoningForConfidence(cropName: String, confidence: Float): String {
@@ -215,7 +227,8 @@ fun runOnnxInference(
                 percentage = (confidence * 100).roundToInt().coerceIn(0, 100),
                 color = CropConstants.getCropColor(cropName),
                 icon = CropConstants.getCropIcon(cropName),
-                reasoning = CropConstants.getReasoningForConfidence(cropName, confidence)
+                reasoning = CropConstants.getReasoningForConfidence(cropName, confidence),
+                iconResId = CropConstants.getCropDrawable(cropName)
             )
         }
 
@@ -255,8 +268,9 @@ fun getDefaultRecommendations(): List<CropPrediction> {
             confidence = 0.72f,
             percentage = 72,
             color = Color(0xFFD2B48C),
-            icon = "🌳",
-            reasoning = "Good drought tolerance"
+            icon = "",  // Using drawable resource instead
+            reasoning = "Good drought tolerance",
+            iconResId = R.drawable.cassava
         ),
         CropPrediction(
             cropName = "Sweet Potato",
@@ -625,10 +639,18 @@ fun ResultsScreen(
 
                     val topCrop = predictions.firstOrNull()
                     if (topCrop != null) {
-                        Text(
-                            topCrop.icon,
-                            fontSize = 48.sp
-                        )
+                        if (topCrop.iconResId != null) {
+                            Image(
+                                painter = painterResource(id = topCrop.iconResId),
+                                contentDescription = topCrop.cropName,
+                                modifier = Modifier.size(48.dp)
+                            )
+                        } else {
+                            Text(
+                                topCrop.icon,
+                                fontSize = 48.sp
+                            )
+                        }
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             topCrop.cropName,
@@ -780,10 +802,20 @@ fun CropPredictionCard(prediction: CropPrediction) {
                     ),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    prediction.icon,
-                    fontSize = 32.sp
-                )
+                if (prediction.iconResId != null) {
+                    // Use drawable resource if available
+                    Image(
+                        painter = painterResource(id = prediction.iconResId),
+                        contentDescription = prediction.cropName,
+                        modifier = Modifier.size(40.dp)
+                    )
+                } else {
+                    // Fallback to emoji
+                    Text(
+                        prediction.icon,
+                        fontSize = 32.sp
+                    )
+                }
             }
 
             // Crop Details
