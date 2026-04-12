@@ -133,6 +133,7 @@ fun runOnnxInference(
 
         // Prepare input data in shape [1, 6] - batch size 1, 6 features
         // Order: Nitrogen, Phosphorus, Potassium, pH Level, Temperature, Moisture
+        // ✅ Using RAW values (models trained on raw data, no scaling applied)
         val rawInputData = arrayOf(
             floatArrayOf(
                 avgNitrogen,      // Nitrogen: raw mg/kg value
@@ -144,7 +145,7 @@ fun runOnnxInference(
             )
         )
 
-        Log.d("CropRecommendation", "Input shape [1, 6]: ${rawInputData[0].contentToString()}")
+        Log.d("CropRecommendation", "Input shape [1, 6] (RAW): ${rawInputData[0].contentToString()}")
 
         // Get ONNX model runner instance and run inference
         val modelRunner = OnnxModelRunner.getInstance(context)

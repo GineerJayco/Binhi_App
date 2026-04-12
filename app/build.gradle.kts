@@ -77,7 +77,9 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation("androidx.media3:media3-exoplayer:1.3.1")
     implementation("androidx.media3:media3-ui:1.3.1")
-    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.17.0")
+    // Updated to 1.18.0 to support ONNX IR version 10
+    // Previous version (1.17.0) only supported up to IR version 9
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.18.0")
 
     // Room Database dependencies
     implementation("androidx.room:room-runtime:2.7.0")

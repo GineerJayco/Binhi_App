@@ -23,10 +23,16 @@ import ai.onnxruntime.OnnxMap
  * - Session creation and management
  * - Inference execution with proper error handling
  * - Resource cleanup
+ *
+ * IMPORTANT: ONNX Runtime Compatibility
+ * - Requires ONNX Runtime 1.18.0 or later for IR version 10 support
+ * - Error: "Unsupported model IR version: 10, max supported IR version: 9"
+ *   means the ONNX Runtime dependency needs to be updated
+ * - See build.gradle.kts for dependency version
  */
 class OnnxModelRunner(
     private val context: Context,
-    private val modelFileName: String = "crop_recommendation_model.onnx"
+    private val modelFileName: String = "xgboost.onnx"
 ) {
 
     companion object {
@@ -38,7 +44,7 @@ class OnnxModelRunner(
 
         fun getInstance(
             context: Context,
-            modelFileName: String = "crop_recommendation_model.onnx"
+            modelFileName: String = "xgboost.onnx"
         ): OnnxModelRunner {
             return instance ?: synchronized(this) {
                 instance ?: OnnxModelRunner(context, modelFileName).also {

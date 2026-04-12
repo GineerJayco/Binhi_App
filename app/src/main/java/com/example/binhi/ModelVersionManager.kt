@@ -36,7 +36,7 @@ class ModelVersionManager(private val context: Context) {
     fun calculateModelHash(): String {
         return try {
             val assetManager = context.assets
-            val inputStream = assetManager.open("crop_recommendation_model.onnx")
+            val inputStream = assetManager.open("xgboost.onnx")
             val bytes = inputStream.readBytes()
             inputStream.close()
 
