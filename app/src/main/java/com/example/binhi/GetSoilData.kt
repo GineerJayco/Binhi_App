@@ -689,32 +689,33 @@ fun GetSoilData(
                         onClick = {
                             if (sessionName.isNotBlank()) {
                                 isSavingSession = true
-                                coroutineScope.launch {
-                                    try {
-                                        val mapTypeStr = if (mapType == MapType.SATELLITE) "SATELLITE" else "NORMAL"
-                                        soilDataViewModel.saveCurrentSession(
-                                            sessionName = sessionName,
-                                            landArea = landArea?.toDoubleOrNull() ?: 0.0,
-                                            length = length?.toDoubleOrNull() ?: 0.0,
-                                            width = width?.toDoubleOrNull() ?: 0.0,
-                                            crop = crop ?: "Unknown",
-                                            polygonCenter = polygonCenter,
-                                            rotation = rotation,
-                                            mapType = mapTypeStr,
-                                            cameraZoom = cameraPositionState.position.zoom
-                                        )
-                                        Log.d("SaveSession", "✓ Session saved: $sessionName")
-                                        sessionSaveSuccess = true
-                                        kotlinx.coroutines.delay(1500)
-                                        showSaveSessionDialog = false
-                                        sessionName = ""
-                                        sessionSaveSuccess = false
-                                    } catch (e: Exception) {
-                                        Log.e("SaveSession", "Error saving session: ${e.message}")
-                                    } finally {
-                                        isSavingSession = false
-                                    }
-                                }
+                        coroutineScope.launch {
+                            try {
+                                val mapTypeStr = if (mapType == MapType.SATELLITE) "SATELLITE" else "NORMAL"
+                                soilDataViewModel.saveCurrentSession(
+                                    sessionName = sessionName,
+                                    landArea = landArea?.toDoubleOrNull() ?: 0.0,
+                                    length = length?.toDoubleOrNull() ?: 0.0,
+                                    width = width?.toDoubleOrNull() ?: 0.0,
+                                    crop = crop ?: "Unknown",
+                                    polygonCenter = polygonCenter,
+                                    rotation = rotation,
+                                    mapType = mapTypeStr,
+                                    cameraZoom = cameraPositionState.position.zoom,
+                                    allDots = dots // Pass all dots including blue points
+                                )
+                                Log.d("SaveSession", "✓ Session saved: $sessionName with ${dots.size} total dots")
+                                sessionSaveSuccess = true
+                                kotlinx.coroutines.delay(1500)
+                                showSaveSessionDialog = false
+                                sessionName = ""
+                                sessionSaveSuccess = false
+                            } catch (e: Exception) {
+                                Log.e("SaveSession", "Error saving session: ${e.message}")
+                            } finally {
+                                isSavingSession = false
+                            }
+                        }
                             }
                         },
                         modifier = Modifier

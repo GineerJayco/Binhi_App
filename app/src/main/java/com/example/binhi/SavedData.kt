@@ -353,7 +353,14 @@ fun SavedSessionMapView(
     )
 
     val dots = remember(session) {
-        session.soilDataPoints.keys.map { pair ->
+        // Use allDotLocations if available (includes blue points), otherwise fall back to soilDataPoints
+        val dotLocations = if (session.allDotLocations.isNotEmpty()) {
+            session.allDotLocations
+        } else {
+            session.soilDataPoints.keys.toList()
+        }
+
+        dotLocations.map { pair ->
             SavedSession.pairToLatLng(pair)
         }
     }
@@ -581,9 +588,17 @@ fun SavedSessionMapView(
             }
 
             dots.forEach { dot ->
+                val dotPair = SavedSession.latLngToPair(dot)
+                val hasData = session.soilDataPoints.containsKey(dotPair)
+                val markerColor = if (hasData) {
+                    BitmapDescriptorFactory.HUE_GREEN // Green for dots with data
+                } else {
+                    BitmapDescriptorFactory.HUE_BLUE  // Blue for dots without data
+                }
+
                 Marker(
                     state = MarkerState(position = dot),
-                    icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN),
+                    icon = BitmapDescriptorFactory.defaultMarker(markerColor),
                     onClick = {
                         selectedDot = dot
                         showDotDialog = true

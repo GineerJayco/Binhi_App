@@ -188,6 +188,7 @@ class SoilDataViewModel(
      * @param polygonCenter Center of the polygon
      * @param rotation Current rotation of the polygon
      * @param mapType Current map type (SATELLITE or NORMAL)
+     * @param allDots List of all dots including blue points (optional)
      * @return The saved session
      */
     fun saveCurrentSession(
@@ -199,10 +200,16 @@ class SoilDataViewModel(
         polygonCenter: LatLng,
         rotation: Float,
         mapType: String,
-        cameraZoom: Float = 15f
+        cameraZoom: Float = 15f,
+        allDots: List<LatLng> = emptyList()
     ): SavedSession {
         // Convert LatLng keys to Pair for serialization
         val soilDataMap = soilDataStorage.mapKeys { (latLng, _) ->
+            SavedSession.latLngToPair(latLng)
+        }
+
+        // Convert all dots to Pair format for serialization
+        val allDotPairs = allDots.map { latLng ->
             SavedSession.latLngToPair(latLng)
         }
 
@@ -217,7 +224,8 @@ class SoilDataViewModel(
             mapType = mapType,
             cameraZoom = cameraZoom,
             totalDots = totalDotsCount,
-            soilDataPoints = soilDataMap
+            soilDataPoints = soilDataMap,
+            allDotLocations = allDotPairs
         )
 
         // Add to saved sessions list in memory

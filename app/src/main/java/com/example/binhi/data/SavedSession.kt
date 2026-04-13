@@ -18,7 +18,8 @@ data class SavedSession(
     val mapType: String, // SATELLITE or NORMAL
     val cameraZoom: Float = 15f, // Camera zoom level
     val totalDots: Int,
-    val soilDataPoints: Map<Pair<Double, Double>, SoilData>, // LatLng as pair to pair
+    val soilDataPoints: Map<Pair<Double, Double>, SoilData>, // LatLng as pair to pair (only dots with data)
+    val allDotLocations: List<Pair<Double, Double>> = emptyList(), // All dots including blue points (no data)
     val timestamp: Long = System.currentTimeMillis()
 ) {
     /**
