@@ -32,7 +32,7 @@ import ai.onnxruntime.OnnxMap
  */
 class OnnxModelRunner(
     private val context: Context,
-    private val modelFileName: String = "xgboost.onnx"
+    private val modelFileName: String = "random_forest.onnx"
 ) {
 
     companion object {
@@ -44,7 +44,7 @@ class OnnxModelRunner(
 
         fun getInstance(
             context: Context,
-            modelFileName: String = "xgboost.onnx"
+            modelFileName: String = "random_forest.onnx"
         ): OnnxModelRunner {
             return instance ?: synchronized(this) {
                 instance ?: OnnxModelRunner(context, modelFileName).also {
