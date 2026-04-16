@@ -46,14 +46,14 @@ fun AboutScreen(navController: NavController, modifier: Modifier = Modifier, isD
         CropInfo(
             name = "Banana",
             description = "A tropical fruit crop rich in potassium. Bananas are widely cultivated in tropical and subtropical regions. They require consistent moisture and warm temperatures. The plant grows tall and produces heavy bunches of fruit. Ideal for regions with high humidity and rainfall.",
-            imageUrl = "https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExbXRoZTBuZjF5YWJtMnRhdmpjMHFtc2RzM213bG54aTFjZmtyaXB4NSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9cw/oUF3xpfAsjXPnKSLMS/giphy.gif",
+            drawableId = R.drawable.banana,
             nitrogen = "60-100 kg/ha",
             phosphorus = "40-60 kg/ha",
             potassium = "150-200 kg/ha",
             phLevel = "5.5-7.5",
             temperature = "24-30°C",
             moisture = "High (1500-2250mm annual)",
-            plantingDistance = "2.4m × 2.4m or 2m × 2m",
+            plantingDistance = "4m × 4m",
             color = Color(0xFFFFD700)
         ),
         CropInfo(
@@ -66,7 +66,7 @@ fun AboutScreen(navController: NavController, modifier: Modifier = Modifier, isD
             phLevel = "5.5-7.0",
             temperature = "20-30°C",
             moisture = "Moderate (750-1500mm annual)",
-            plantingDistance = "1.0m × 1.0m or 1.2m × 0.8m",
+            plantingDistance = "1m × 0.75m",
             color = Color(0xFF8B6F47)
         ),
         CropInfo(
@@ -79,20 +79,20 @@ fun AboutScreen(navController: NavController, modifier: Modifier = Modifier, isD
             phLevel = "5.8-6.5",
             temperature = "22-28°C",
             moisture = "Moderate (750-1000mm annual)",
-            plantingDistance = "0.9m × 0.3m or 1.0m × 0.25m",
+            plantingDistance = "1m × 0.75m",
             color = Color(0xFFFF8C00)
         ),
         CropInfo(
             name = "Corn",
             description = "A versatile grain crop used for food, animal feed, and industrial products. Corn requires good drainage and fertile soil. It grows tall with tassels at the top and ears developing along the stalk. Fast-growing with high yield potential. One of the most important cereal crops worldwide.",
-            imageUrl = "https://media4.giphy.com/media/v1.Y2lkPTc5MGI3NjExZWhibW11ejk2MXR6eTh2Zm94emRmcjg1eXpzMXJlYWFuc3Rybm13bSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9cw/xT9IgMfVVT58g6LWI8/giphy.gif\n",
+            drawableId = R.drawable.corn,
             nitrogen = "120-150 kg/ha",
             phosphorus = "60-80 kg/ha",
             potassium = "80-100 kg/ha",
             phLevel = "6.0-7.5",
             temperature = "18-27°C",
             moisture = "Moderate (400-600mm during season)",
-            plantingDistance = "0.75m × 0.25m or 0.9m × 0.2m",
+            plantingDistance = "0.75m × 0.25m",
             color = Color(0xFFFFA500)
         ),
         CropInfo(
@@ -105,7 +105,7 @@ fun AboutScreen(navController: NavController, modifier: Modifier = Modifier, isD
             phLevel = "5.0-8.0",
             temperature = "24-32°C",
             moisture = "Moderate to High (1500-2250mm annual)",
-            plantingDistance = "10m × 10m or 9m × 9m (for spacing mature trees)",
+            plantingDistance = "10m × 10m",
             color = Color(0xFF8B4513)
         )
     )
