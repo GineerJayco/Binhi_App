@@ -195,7 +195,9 @@ private fun MapContent(
     radarScale: Float,
     radarAlpha: Float,
     onMarkerClick: (LatLng) -> Unit,
-    onCropPositionsUpdate: (List<Pair<Int, LatLng>>) -> Unit
+    onCropPositionsUpdate: (List<Pair<Int, LatLng>>) -> Unit,
+    currentPage: Int = 0,
+    pageSize: Int = 50
 ) {
     val context = LocalContext.current
 
@@ -208,7 +210,7 @@ private fun MapContent(
                 strokeWidth = 5f
             )
 
-            // Update crop positions list for the crop list dialog
+            // Update crop positions list for the crop list dialog (showing all positions for reference)
             LaunchedEffect(fixedCropPositions) {
                 onCropPositionsUpdate(fixedCropPositions.mapIndexed { index, position ->
                     Pair(index + 1, position)
@@ -219,13 +221,24 @@ private fun MapContent(
             val cachedIcon = crop?.let { getCropIcon(context, it) }
                 ?: BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN)
 
-            fixedCropPositions.forEachIndexed { index, position ->
-                key(index, position) {  // Use key for each marker to prevent unnecessary recompositions
+            // Calculate pagination
+            val startIdx = currentPage * pageSize
+            val endIdx = minOf(startIdx + pageSize, fixedCropPositions.size)
+            val paginatedPositions = if (fixedCropPositions.isNotEmpty()) {
+                fixedCropPositions.subList(startIdx, endIdx)
+            } else {
+                emptyList()
+            }
+
+            // Render only paginated markers (performance optimization)
+            paginatedPositions.forEachIndexed { paginatedIndex, position ->
+                val actualIndex = startIdx + paginatedIndex
+                key(actualIndex, position) {  // Use key for each marker to prevent unnecessary recompositions
                     val markerState = rememberMarkerState(position = position)
 
                      Marker(
                          state = markerState,
-                         title = "${crop ?: "Crop"} ${index + 1}",
+                         title = "${crop ?: "Crop"} ${actualIndex + 1}",
                          icon = cachedIcon,  // Use cached icon instead of recreating
                          anchor = Offset(0.5f, 0.5f),  // Center the marker at the exact position
                          rotation = -cameraPositionState.position.bearing,
@@ -292,6 +305,10 @@ fun VisualizeLA(
     var radarAlpha by remember { mutableFloatStateOf(1f) }
     var showCropNavigator by remember { mutableStateOf(false) }
     var currentCropIndex by remember { mutableStateOf(0) }
+
+    // Pagination state for rendering markers efficiently
+    var currentPage by remember { mutableStateOf(0) }
+    val pageSize = 50  // Number of markers to display per page
 
     // Use Animatable for radar effect animation
     val radarScaleAnimatable = remember { Animatable(1f) }
@@ -509,21 +526,23 @@ fun VisualizeLA(
             )
         ) {
              MapContent(
-                 polygonPoints = polygonPoints,
-                 crop = crop,
-                 cameraPositionState = cameraPositionState,
-                 fixedCropPositions = transformedCropPositions,
-                 selectedMarkerPosition = selectedMarkerPosition,
-                 radarScale = radarScale,
-                 radarAlpha = radarAlpha,
-                 onMarkerClick = { position ->
-                     selectedMarkerPosition = position
-                     showMarkerDialog = true
-                 },
-                 onCropPositionsUpdate = { positions ->
-                     cropLocationsList = positions
-                 }
-             )
+                  polygonPoints = polygonPoints,
+                  crop = crop,
+                  cameraPositionState = cameraPositionState,
+                  fixedCropPositions = transformedCropPositions,
+                  selectedMarkerPosition = selectedMarkerPosition,
+                  radarScale = radarScale,
+                  radarAlpha = radarAlpha,
+                  onMarkerClick = { position ->
+                      selectedMarkerPosition = position
+                      showMarkerDialog = true
+                  },
+                  onCropPositionsUpdate = { positions ->
+                      cropLocationsList = positions
+                  },
+                  currentPage = currentPage,
+                  pageSize = pageSize
+              )
         }
 
 
@@ -587,6 +606,69 @@ fun VisualizeLA(
             containerColor = Color.White
         ) {
             Icon(Icons.AutoMirrored.Filled.List, contentDescription = "View Crop Locations")
+        }
+
+        // Pagination Controls
+        val totalPages = if (transformedCropPositions.isNotEmpty()) {
+            (transformedCropPositions.size + pageSize - 1) / pageSize
+        } else {
+            1
+        }
+
+        // Ensure currentPage doesn't exceed available pages
+        LaunchedEffect(totalPages) {
+            if (currentPage >= totalPages) {
+                currentPage = 0
+            }
+        }
+
+        if (transformedCropPositions.isNotEmpty() && totalPages > 1) {
+            Row(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(16.dp)
+                    .padding(top = 128.dp)
+                    .background(
+                        color = Color.Black.copy(alpha = 0.6f),
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+                    )
+                    .padding(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(
+                    onClick = { if (currentPage > 0) currentPage-- },
+                    enabled = currentPage > 0,
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                        contentDescription = "Previous Page",
+                        tint = if (currentPage > 0) Color.White else Color.Gray,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                Text(
+                    text = "${currentPage + 1}/${totalPages}",
+                    color = Color.White,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(horizontal = 8.dp)
+                )
+
+                IconButton(
+                    onClick = { if (currentPage < totalPages - 1) currentPage++ },
+                    enabled = currentPage < totalPages - 1,
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = "Next Page",
+                        tint = if (currentPage < totalPages - 1) Color.White else Color.Gray,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
         }
 
         Column(

@@ -297,6 +297,10 @@ fun VisualizeCQ(
     var showCropNavigator by remember { mutableStateOf(false) }
     var currentCropIndex by remember { mutableStateOf(0) }
 
+    // Pagination state for rendering markers efficiently
+    var currentPage by remember { mutableStateOf(0) }
+    val pageSize = 50  // Number of markers to display per page
+
     // Use Animatable for radar effect animation
     val radarScaleAnimatable = remember { Animatable(1f) }
     val radarAlphaAnimatable = remember { Animatable(1f) }
@@ -427,6 +431,29 @@ fun VisualizeCQ(
             }
         }
 
+        // Calculate pagination values
+        val totalPages = if (transformedCropPositions.isNotEmpty()) {
+            (transformedCropPositions.size + pageSize - 1) / pageSize
+        } else {
+            1
+        }
+
+        // Ensure currentPage doesn't exceed available pages
+        LaunchedEffect(totalPages) {
+            if (currentPage >= totalPages) {
+                currentPage = 0
+            }
+        }
+
+        // Get paginated crop positions
+        val startIdx = currentPage * pageSize
+        val endIdx = minOf(startIdx + pageSize, transformedCropPositions.size)
+        val paginatedCropPositions = if (transformedCropPositions.isNotEmpty()) {
+            transformedCropPositions.subList(startIdx, endIdx)
+        } else {
+            emptyList()
+        }
+
         GoogleMap(
             modifier = Modifier.fillMaxSize(),
             cameraPositionState = cameraPositionState,
@@ -450,7 +477,7 @@ fun VisualizeCQ(
                         strokeWidth = 5f
                     )
 
-                    // Update crop locations list for the crop list dialog
+                    // Update crop locations list for the crop list dialog (showing all positions for reference)
                     LaunchedEffect(transformedCropPositions) {
                         cropLocationsList = transformedCropPositions.mapIndexed { index, position ->
                             Pair(index + 1, position)
@@ -461,13 +488,15 @@ fun VisualizeCQ(
                     val cachedIcon = crop?.let { getCropIcon(context, it) }
                         ?: BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN)
 
-                    transformedCropPositions.forEachIndexed { index, position ->
-                        key(index, position) {  // Use key for each marker to prevent unnecessary recompositions
+                    // Render only paginated crop markers (performance optimization)
+                    paginatedCropPositions.forEachIndexed { paginatedIndex, position ->
+                        val actualIndex = startIdx + paginatedIndex
+                        key(actualIndex, position) {  // Use key for each marker to prevent unnecessary recompositions
                             val markerState = rememberMarkerState(position = position)
 
                             Marker(
                                 state = markerState,
-                                title = "${crop ?: "Crop"} ${index + 1}",
+                                title = "${crop ?: "Crop"} ${actualIndex + 1}",
                                 icon = cachedIcon,  // Use cached icon instead of recreating
                                 anchor = androidx.compose.ui.geometry.Offset(0.5f, 0.5f),  // Center the marker at the exact position
                                 rotation = -cameraPositionState.position.bearing,
@@ -563,6 +592,56 @@ fun VisualizeCQ(
             containerColor = Color.White
         ) {
             Icon(Icons.AutoMirrored.Filled.List, contentDescription = "View Crop Locations")
+        }
+
+        // Pagination Controls
+        if (transformedCropPositions.isNotEmpty() && totalPages > 1) {
+            Row(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(16.dp)
+                    .padding(top = 128.dp)
+                    .background(
+                        color = Color.Black.copy(alpha = 0.6f),
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+                    )
+                    .padding(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(
+                    onClick = { if (currentPage > 0) currentPage-- },
+                    enabled = currentPage > 0,
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                        contentDescription = "Previous Page",
+                        tint = if (currentPage > 0) Color.White else Color.Gray,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                Text(
+                    text = "${currentPage + 1}/${totalPages}",
+                    color = Color.White,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(horizontal = 8.dp)
+                )
+
+                IconButton(
+                    onClick = { if (currentPage < totalPages - 1) currentPage++ },
+                    enabled = currentPage < totalPages - 1,
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = "Next Page",
+                        tint = if (currentPage < totalPages - 1) Color.White else Color.Gray,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
         }
 
         Column(
