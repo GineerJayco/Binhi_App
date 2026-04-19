@@ -540,6 +540,7 @@ fun VisualizeCQ(
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .padding(8.dp)
+                .padding(top = 56.dp)
                 .background(Color.Black.copy(alpha = 0.6f), shape = androidx.compose.foundation.shape.CircleShape)
         ) {
             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
